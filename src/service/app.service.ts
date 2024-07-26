@@ -1,51 +1,128 @@
 import { Injectable } from '@nestjs/common';
-import {
-  NodeId,
-  NodeIdType,
-  coerceNodeId,
-  resolveNodeId,
-  LocalizedText,
-  VariantArrayType,
-  Variant,
-  DataType,
-  StatusCodes,
-  DataValue,
-} from 'node-opcua';
+// import {
+//   OPCUAClient,
+//   ClientSession,
+//   ClientSubscription,
+//   AttributeIds,
+//   TimestampsToReturn,
+//   MonitoringParametersOptions,
+//   ReadValueIdOptions,
+// } from 'node-opcua';
 
 @Injectable()
 export class AppService {
-  getHello(): string {
-    const nodeId1 = coerceNodeId('ns=3;i=100');
-    console.log(nodeId1.toString());
-    // ns=4;s=TemperatureSensor
-    const nodeId2 = coerceNodeId('ns=3;s=TemperatureSensor');
-    console.log(nodeId2.toString());
-    // ns=4;s=TemperatureSensor
-    const nodeId3 = coerceNodeId('g=1E14849E-3744-470d-8C7B-5F9110C2FA32');
-    console.log(`nodeId3.identifierType: ${nodeId3.identifierType}`);
-    console.log(`NodeIdType.GUID: ${NodeIdType.GUID}`);
-    // nodeId3.toString().should.eql("ns=0g=1E14849E-3744-470d-8C7B-5F9110C2FA32");
-    console.log(nodeId3.toString());
+  // private clients: { [key: string]: OPCUAClient } = {};
+  // private sessions: { [key: string]: ClientSession } = {};
+  // private subscriptions: { [key: string]: ClientSubscription } = {};
+  // private machineItemIDs = [
+  //   'VAT1T300',
+  //   'VAT1T301',
+  //   'VAP1P300',
+  //   'J3P1P001',
+  //   'VAS1S303',
+  //   'J1S1S005',
+  //   'J1P2P005',
+  //   'J1T1T040',
+  // ];
 
-    const nodeId4 = resolveNodeId('RootFolder');
-    console.log(nodeId4.toString());
-    // ns=0g=1E14849E-3744-470d-8C7B-5F9110C2FA32"
+  // async setConnection(endpointUrl: string): Promise<string> {
+  //   if (this.clients[endpointUrl]) {
+  //     console.log(`Already connected to OPC UA server at ${endpointUrl}`);
+  //     return `Already connected to OPC UA server at ${endpointUrl}`;
+  //   }    
+  //   const client = OPCUAClient.create({ endpointMustExist: false });
+  //   await client.connect(endpointUrl);
+  //   console.log(`Connected to OPC UA server at ${endpointUrl}`);
+  //   const session = await client.createSession();
+  //   console.log(`Session created for ${endpointUrl}`);
+  //   this.clients[endpointUrl] = client;
+  //   this.sessions[endpointUrl] = session;
 
-    const variant1 = new Variant({
-      dataType: DataType.Double,
-      arrayType: VariantArrayType.Scalar,
-      value: 3.14,
-    });
-    console.log('variant1 = ', variant1.toString());
-    const dataValue4 = new DataValue({
-      sourceTimestamp: new Date(),
-      sourcePicoseconds: 0,
-      serverTimestamp: new Date(),
-      serverPicoseconds: 0,
-      statusCode: StatusCodes.Good,
-      value: { dataType: 'Double', value: 3.14 },
-    });
-    console.log('dataValue4 = ', dataValue4.toString());
-    return 'Hello World!';
-  }
+  //   await this.readData(endpointUrl, session);
+  //   return `Connection established and data monitoring started for ${endpointUrl}`;
+  // }
+
+  // async readData(endpointUrl: string, session: ClientSession) {
+  //   const subscription = ClientSubscription.create(session, {
+  //     requestedPublishingInterval: 1000,
+  //     requestedLifetimeCount: 100,
+  //     requestedMaxKeepAliveCount: 10,
+  //     maxNotificationsPerPublish: 10,
+  //     publishingEnabled: true,
+  //     priority: 10,
+  //   });
+
+  //   subscription
+  //     .on('started', () => {
+  //       console.log(
+  //         `Subscription started for ${endpointUrl} - subscriptionId=`,
+  //         subscription.subscriptionId,
+  //       );
+  //     })
+  //     .on('keepalive', () => {
+  //       console.log(`Subscription keepalive for ${endpointUrl}`);
+  //     })
+  //     .on('terminated', () => {
+  //       console.log(`Subscription terminated for ${endpointUrl}`);
+  //     });
+
+  //   const itemsToMonitor: ReadValueIdOptions[] = this.machineItemIDs.map(
+  //     (itemID) => ({
+  //       nodeId: `ns=1;s=${itemID}`,
+  //       attributeId: AttributeIds.Value,
+  //     }),
+  //   );
+
+  //   const parameters: MonitoringParametersOptions = {
+  //     samplingInterval: 1000,
+  //     discardOldest: true,
+  //     queueSize: 10,
+  //   };
+
+  //   itemsToMonitor.forEach(async (item) => {
+  //     const monitoredItem = subscription.monitor(
+  //       item,
+  //       parameters,
+  //       TimestampsToReturn.Both,
+  //     );
+
+  //     (await monitoredItem).on('changed', (dataValue) => {
+  //       console.log(
+  //         `Value of ${item.nodeId} from ${endpointUrl} = `,
+  //         dataValue.value.value.toString(),
+  //       );
+  //     });
+  //   });
+
+  //   this.subscriptions[endpointUrl] = subscription;
+  // }
+
+  // async disconnect(endpointUrl: string) {
+  //   const subscription = this.subscriptions[endpointUrl];
+  //   const session = this.sessions[endpointUrl];
+  //   const client = this.clients[endpointUrl];
+
+  //   if (subscription) {
+  //     await subscription.terminate();
+  //     console.log(`Subscription terminated for ${endpointUrl}`);
+  //   }
+  //   if (session) {
+  //     await session.close();
+  //     console.log(`Session closed for ${endpointUrl}`);
+  //   }
+  //   if (client) {
+  //     await client.disconnect();
+  //     console.log(`Client disconnected from ${endpointUrl}`);
+  //   }
+
+  //   delete this.subscriptions[endpointUrl];
+  //   delete this.sessions[endpointUrl];
+  //   delete this.clients[endpointUrl];
+  // }
+
+  // onModuleDestroy() {
+  //   Object.keys(this.clients).forEach((endpointUrl) => {
+  //     this.disconnect(endpointUrl).catch(console.error);
+  //   });
+  // }
 }
