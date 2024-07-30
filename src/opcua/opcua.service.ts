@@ -1,20 +1,26 @@
-// src/opcua/opcua.service.ts
+
 import { Injectable, Logger } from '@nestjs/common';
+// import { ConnectOpcuaDto } from './dto/connect-opcua.dto';
+// import { DisconnectOpcuaDto } from './dto/disconnect-opcua.dto';
 import {
   OPCUAClient,
   AttributeIds,
-  makeBrowsePath,
-  StatusCodes,
-  TimestampsToReturn,
-  DataValue,
-  MonitoringParametersOptions,
   ClientSubscription,
   ClientSession,
   ReadValueIdOptions,
+  MonitoringParametersOptions,
+  TimestampsToReturn,
 } from 'node-opcua';
+import { RabbitmqService } from '../helper/rabbitmq.service';
 
 @Injectable()
 export class OpcuaService {
+  private readonly logger = new Logger(OpcuaService.name);
+
+  constructor(private readonly rabbitmqService: RabbitmqService) {
+    this.rabbitmqService.connect();
+  }
+
   private clients: { [key: string]: OPCUAClient } = {};
   private sessions: { [key: string]: ClientSession } = {};
   private subscriptions: { [key: string]: ClientSubscription } = {};
@@ -24,23 +30,22 @@ export class OpcuaService {
 
   async setConnection(endpointUrl: string): Promise<string> {
     if (this.clients[endpointUrl]) {
-      console.log(`Already connected to OPC UA server at ${endpointUrl}`);
+      this.logger.log(`Already connected to OPC UA server at ${endpointUrl}`);
       return `Already connected to OPC UA server at ${endpointUrl}`;
     }
 
     const client = OPCUAClient.create({ endpointMustExist: false });
 
     try {
-      // Attempt to connect to the endpoint with a timeout of 15 seconds
       const connectionPromise = client.connect(endpointUrl);
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject('Connection timeout'), 5000));
 
       await Promise.race([connectionPromise, timeoutPromise]);
 
-      console.log(`Connected to OPC UA server at ${endpointUrl}`);
+      this.logger.log(`Connected to OPC UA server at ${endpointUrl}`);
 
       const session = await client.createSession();
-      console.log(`Session created for ${endpointUrl}`);
+      this.logger.log(`Session created for ${endpointUrl}`);
 
       this.clients[endpointUrl] = client;
       this.sessions[endpointUrl] = session;
@@ -49,7 +54,7 @@ export class OpcuaService {
 
       return `Connection established and data monitoring started for ${endpointUrl}`;
     } catch (error) {
-      console.error(`Error connecting to OPC UA server at ${endpointUrl}:`, error);
+      this.logger.error(`Error connecting to OPC UA server at ${endpointUrl}`, error);
       await this.cleanupConnection(endpointUrl);
       return `Failed to connect to OPC UA server at ${endpointUrl}`;
     }
@@ -67,22 +72,13 @@ export class OpcuaService {
 
     subscription
       .on('started', () => {
-        console.log(`Subscription started for ${endpointUrl} - subscriptionId=`, subscription.subscriptionId);
+        this.logger.log(`Subscription started for ${endpointUrl} - subscriptionId=`, subscription.subscriptionId);
       })
       .on('keepalive', () => {
-        console.log(`Subscription keepalive for ${endpointUrl}`);
+        this.logger.log(`Subscription keepalive for ${endpointUrl}`);
       })
       .on('terminated', async () => {
-        console.log(`Subscription terminated for ${endpointUrl}`);
-        // Attempt to reconnect after the subscription is terminated - to be refined later
-        // if (!this.reconnectAttempts[endpointUrl]) {
-        //   this.reconnectAttempts[endpointUrl] = 0;
-        // }
-        // if (this.reconnectAttempts[endpointUrl] < this.maxReconnectAttempts) {
-        //   await this.reconnect(endpointUrl);
-        // } else {
-        //   console.log(`Connection failed after ${this.maxReconnectAttempts} attempts for ${endpointUrl}`);
-        // }
+        this.logger.log(`Subscription terminated for ${endpointUrl}`);
       });
 
     const itemsToMonitor: ReadValueIdOptions[] = this.machineItemIDs.map((itemID) => ({
@@ -100,10 +96,12 @@ export class OpcuaService {
       try {
         const monitoredItem = await subscription.monitor(item, parameters, TimestampsToReturn.Both);
         monitoredItem.on('changed', (dataValue) => {
-          console.log(`Value of ${item.nodeId} from ${endpointUrl} = `, dataValue.value.value.toString());
+          const message = `Value of ${item.nodeId} from ${endpointUrl} = ${dataValue.value.value.toString()}`;
+          // this.logger.log(message);
+          this.rabbitmqService.publishOpcUaData(message);
         });
       } catch (error) {
-        console.error(`Error monitoring item ${item.nodeId} from ${endpointUrl}:`, error);
+        this.logger.error(`Error monitoring item ${item.nodeId} from ${endpointUrl}`, error);
       }
     });
 
@@ -111,12 +109,12 @@ export class OpcuaService {
   }
 
   async reconnect(endpointUrl: string) {
-    console.log(`Reconnecting to OPC UA server at ${endpointUrl}... Attempt ${this.reconnectAttempts[endpointUrl] + 1}`);
+    this.logger.log(`Reconnecting to OPC UA server at ${endpointUrl}... Attempt ${this.reconnectAttempts[endpointUrl] + 1}`);
     await this.cleanupConnection(endpointUrl);
     this.reconnectAttempts[endpointUrl]++;
     const result = await this.setConnection(endpointUrl);
     if (result.includes("Failed")) {
-      console.log(`Reconnect attempt ${this.reconnectAttempts[endpointUrl]} failed for ${endpointUrl}`);
+      this.logger.log(`Reconnect attempt ${this.reconnectAttempts[endpointUrl]} failed for ${endpointUrl}`);
     } else {
       this.reconnectAttempts[endpointUrl] = 0;
     }
@@ -126,9 +124,9 @@ export class OpcuaService {
     if (this.subscriptions[endpointUrl]) {
       try {
         await this.subscriptions[endpointUrl].terminate();
-        console.log(`Subscription terminated for ${endpointUrl}`);
+        this.logger.log(`Subscription terminated for ${endpointUrl}`);
       } catch (error) {
-        console.error(`Error terminating subscription for ${endpointUrl}:`, error);
+        this.logger.error(`Error terminating subscription for ${endpointUrl}`, error);
       }
       delete this.subscriptions[endpointUrl];
     }
@@ -136,9 +134,9 @@ export class OpcuaService {
     if (this.sessions[endpointUrl]) {
       try {
         await this.sessions[endpointUrl].close();
-        console.log(`Session closed for ${endpointUrl}`);
+        this.logger.log(`Session closed for ${endpointUrl}`);
       } catch (error) {
-        console.error(`Error closing session for ${endpointUrl}:`, error);
+        this.logger.error(`Error closing session for ${endpointUrl}`, error);
       }
       delete this.sessions[endpointUrl];
     }
@@ -146,9 +144,9 @@ export class OpcuaService {
     if (this.clients[endpointUrl]) {
       try {
         await this.clients[endpointUrl].disconnect();
-        console.log(`Client disconnected from ${endpointUrl}`);
+        this.logger.log(`Client disconnected from ${endpointUrl}`);
       } catch (error) {
-        console.error(`Error disconnecting client from ${endpointUrl}:`, error);
+        this.logger.error(`Error disconnecting client from ${endpointUrl}`, error);
       }
       delete this.clients[endpointUrl];
     }
@@ -161,15 +159,15 @@ export class OpcuaService {
 
     if (subscription) {
       await subscription.terminate();
-      console.log(`Subscription terminated for ${endpointUrl}`);
+      this.logger.log(`Subscription terminated for ${endpointUrl}`);
     }
     if (session) {
       await session.close();
-      console.log(`Session closed for ${endpointUrl}`);
+      this.logger.log(`Session closed for ${endpointUrl}`);
     }
     if (client) {
       await client.disconnect();
-      console.log(`Client disconnected from ${endpointUrl}`);
+      this.logger.log(`Client disconnected from ${endpointUrl}`);
     }
 
     delete this.subscriptions[endpointUrl];
@@ -180,7 +178,7 @@ export class OpcuaService {
 
   onModuleDestroy() {
     Object.keys(this.clients).forEach((endpointUrl) => {
-      this.disconnect(endpointUrl).catch(console.error);
+      this.disconnect(endpointUrl).catch(this.logger.error);
     });
   }
 }
