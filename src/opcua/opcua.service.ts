@@ -11,15 +11,15 @@ import {
   MonitoringParametersOptions,
   TimestampsToReturn,
 } from 'node-opcua';
-import { RabbitmqService } from '../helper/rabbitmq.service';
+// import { RabbitmqService } from '../helper/rabbitmq.service';
 
 @Injectable()
 export class OpcuaService {
   private readonly logger = new Logger(OpcuaService.name);
 
-  constructor(private readonly rabbitmqService: RabbitmqService) {
-    this.rabbitmqService.connect();
-  }
+  // constructor(private readonly rabbitmqService: RabbitmqService) {
+  //   this.rabbitmqService.connect();
+  // }
 
   private clients: { [key: string]: OPCUAClient } = {};
   private sessions: { [key: string]: ClientSession } = {};
@@ -97,8 +97,8 @@ export class OpcuaService {
         const monitoredItem = await subscription.monitor(item, parameters, TimestampsToReturn.Both);
         monitoredItem.on('changed', (dataValue) => {
           const message = `Value of ${item.nodeId} from ${endpointUrl} = ${dataValue.value.value.toString()}`;
-          // this.logger.log(message);
-          this.rabbitmqService.publishOpcUaData(message);
+          this.logger.log(message);
+          // this.rabbitmqService.publishOpcUaData(message);
         });
       } catch (error) {
         this.logger.error(`Error monitoring item ${item.nodeId} from ${endpointUrl}`, error);

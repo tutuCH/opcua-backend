@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UnauthorizedException, Request } from '@nestjs/common';
 import { MachinesService } from './machines.service';
 import { CreateMachineDto } from './dto/create-machine.dto';
 import { UpdateMachineDto } from './dto/update-machine.dto';
@@ -12,9 +12,9 @@ export class MachinesController {
     return this.machinesService.create(createMachineDto);
   }
 
-  @Get()
-  findAll() {
-    return this.machinesService.findAll();
+  @Get('factories-machines/:userId')
+  findFactoriesAndMachinesByUserId(@Param('userId') userId: number, @Request() req) {
+    return this.machinesService.findFactoriesAndMachinesByUserId(userId);
   }
 
   @Get(':id')

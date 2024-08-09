@@ -2,7 +2,7 @@ import { IsString, IsEmail, IsNotEmpty } from 'class-validator';
 
 export class CreateUserDto {
   @IsString()
-  @IsNotEmpty()
+  // @IsNotEmpty()
   username: string;
 
   @IsEmail()
@@ -12,4 +12,8 @@ export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
   password: string;
+
+  @IsString()
+  // @IsNotEmpty()
+  accessLevel: string;
 }

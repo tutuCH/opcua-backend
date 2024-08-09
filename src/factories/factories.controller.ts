@@ -22,6 +22,11 @@ export class FactoriesController {
     return this.factoriesService.findOne(+id);
   }
 
+  @Get(':userId')
+  findFactoriesByUserId(@Param('userId') userId: string) {
+    return this.factoriesService.findFactoriesByUserId(+userId);
+  }
+
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateFactoryDto: UpdateFactoryDto) {
     return this.factoriesService.update(+id, updateFactoryDto);

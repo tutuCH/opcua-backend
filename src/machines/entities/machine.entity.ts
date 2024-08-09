@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, Unique } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
 import { Factory } from '../../factories/entities/factory.entity';
 
@@ -11,7 +11,11 @@ export class Machine {
   machineName: string;
 
   @Column({ type: 'varchar', length: 255 })
+  // @Unique('machine_ip_address', ['machineIpAddress'])
   machineIpAddress: string;
+
+  @Column({ type: 'int' })
+  machineIndex: string;
 
   @ManyToOne(() => User, (user) => user.machines)
   user: User;
