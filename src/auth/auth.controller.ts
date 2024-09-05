@@ -29,8 +29,8 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   @Post('signup')
   async signUp(@Body() signUpDto: SignUpDto) {
-    await this.authService.signUp(signUpDto.email, signUpDto.password, signUpDto.username);
-    return { message: 'User registered successfully' };
+    return this.authService.signUp(signUpDto.email, signUpDto.password, signUpDto.username);
+    // return { message: 'User registered successfully' };
   }
 
   // Protected route for getting user profile

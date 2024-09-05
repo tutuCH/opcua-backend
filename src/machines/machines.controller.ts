@@ -27,6 +27,16 @@ export class MachinesController {
     return this.machinesService.update(+id, updateMachineDto);
   }
 
+  // @Patch('update-index/:machineId/:machineIndex')
+  // updateIndex(@Param('machineId') id: string, @Param('machineIndex') index: string) {
+  //   return this.machinesService.updateIndex(+id, +index);
+  // }
+  @Patch('update-index/:machineId/:machineIndex')
+  updateIndex(@Param('machineId') id: string, @Param('machineIndex') index: string) {
+    return this.machinesService.updateIndex(+id, +index);
+  }
+  
+
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.machinesService.remove(+id);

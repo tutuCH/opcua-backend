@@ -100,6 +100,31 @@ export class MachinesService {
     return await this.machineRepository.save(machine);
   }
 
+  async updateIndex(
+    id: number,
+    index: number,
+  ): Promise<{ message: string, status: string, machineId: number, machineIndex: number }> {
+    try {
+      const machine = await this.findOne(id);
+      if (!machine) {
+        throw new NotFoundException(`Machine with ID ${id} not found`);
+      }
+      machine.machineIndex = index.toString();
+      await this.machineRepository.save(machine);
+      return {
+        message: `Machine with ID ${id} successfully updated. New machineIndex: ${machine.machineIndex}`,
+        status: 'success',
+        machineId: machine.machineId,
+        machineIndex: parseInt(machine.machineIndex),
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('An unexpected error occurred');
+    }
+  }
+
   async remove(id: number): Promise<string> {
     const machine = await this.findOne(id);
     if (!machine) {
@@ -108,60 +133,6 @@ export class MachinesService {
     await this.machineRepository.remove(machine);
     return `Machine with ID ${id} successfully removed.`;
   }
-  
-
-  // async findFactoriesAndMachinesByUserId(userId: number): Promise<any[]> {
-  //   const factoriesWithMachines = await this.machineRepository
-  //     .createQueryBuilder('machine')
-  //     .leftJoinAndSelect('machine.factory', 'factory')
-  //     .leftJoinAndSelect('factory.user', 'user')
-  //     .select([
-  //       'factory.factoryId',
-  //       'factory.factoryName',
-  //       'machine.machineId',
-  //       'machine.machineName',
-  //       'machine.machineIpAddress',
-  //       'machine.machineIndex',
-  //     ])
-  //     .where('user.userId = :userId', { userId })
-  //     .orderBy('factory.createdAt', 'ASC')
-  //     .getMany();
-
-  //   if (!factoriesWithMachines.length) {
-  //     throw new NotFoundException(
-  //       `Factories and machines for userId ${userId} not found`,
-  //     );
-  //   }
-
-  //   // Group machines by factory
-  //   const factoryMap = new Map<number, any>();
-
-  //   factoriesWithMachines.forEach((machine) => {
-  //     const factoryId = machine.factory.factoryId;
-
-  //     if (!factoryMap.has(factoryId)) {
-  //       factoryMap.set(factoryId, {
-  //         factoryId: machine.factory.factoryId,
-  //         factoryName: machine.factory.factoryName,
-  //         machines: [],
-  //       });
-  //     }
-
-  //     factoryMap.get(factoryId).machines.push({
-  //       machineId: machine.machineId,
-  //       machineName: machine.machineName,
-  //       machineIpAddress: machine.machineIpAddress,
-  //       machineIndex: machine.machineIndex,
-  //     });
-  //   });
-
-  //   const result = Array.from(factoryMap.values());
-  //   this.logger.log(
-  //     `findFactoriesAndMachinesByUserId: ${JSON.stringify(result)}`,
-  //   );
-  //   return result;
-  // }
-
 
   async findFactoriesAndMachinesByUserId(userId: number): Promise<any[]> {
     const factoriesWithMachines = await this.factoryRepository
@@ -180,8 +151,9 @@ export class MachinesService {
       .orderBy('factory.createdAt', 'ASC')
       .getMany();
   
+    // If no factories with machines are found, return an empty array
     if (!factoriesWithMachines.length) {
-      throw new NotFoundException(`Factories and machines for userId ${userId} not found`);
+      return [];
     }
   
     // Transform the data to ensure each factory has an empty machines array if no machines are present

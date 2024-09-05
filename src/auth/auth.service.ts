@@ -11,7 +11,11 @@ export class AuthService {
   ) {}
 
   // SignUp function
-  async signUp(email: string, pass: string, username: string): Promise<void> {
+  async signUp(email: string, pass: string, username: string): Promise<{ access_token: string, userId: string }> {
+    if (!username) {
+      throw new ConflictException('Username is required');
+    }
+
     const existingUser = await this.userService.findOne(email);
     if (existingUser) {
       throw new ConflictException('User with this email already exists');
@@ -20,19 +24,34 @@ export class AuthService {
     // Hash the password before saving the user
     const hashedPassword = await this.hashPassword(pass);
 
-    await this.userService.create({
+    // Create the new user
+    const createdUser = await this.userService.create({
       email,
       password: hashedPassword,
       username,
       accessLevel: ''
     });
+
+    // Retrieve the created user's information
+    const user = await this.userService.findOne(email);
+
+    if (!user) {
+      throw new UnauthorizedException('User not found after creation');
+    }
+
+    // Generate the JWT token
+    const payload = { sub: user.userId, username: user.username };
+    return {
+      access_token: await this.jwtService.signAsync(payload),
+      userId: user.userId.toString(),
+    };
   }
 
   // SignIn function
   async signIn(
     email: string,
     pass: string,
-  ): Promise<{ access_token: string }> {
+  ): Promise<{ access_token: string, userId: string }> {
     const user = await this.userService.findOne(email);
     if (!user || !(await this.checkPassword(pass, user.password))) {
       throw new UnauthorizedException('Invalid credentials');
@@ -41,6 +60,7 @@ export class AuthService {
     const payload = { sub: user.userId, username: user.username };
     return {
       access_token: await this.jwtService.signAsync(payload),
+      userId: user.userId.toString(),
     };
   }
 
