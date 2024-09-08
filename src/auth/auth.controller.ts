@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Request,
 } from '@nestjs/common';
@@ -38,4 +39,19 @@ export class AuthController {
   getProfile(@Request() req) {
     return req.user;
   }
+
+  @Public()
+  @Post('forget-password')
+  async forgotPassword(@Body('email') email: string) {
+    return this.authService.sendPasswordResetEmail(email);
+  }
+
+  @Public()
+  @Post('reset-password/:token')
+  async resetPassword(
+    @Param('token') token: string,
+    @Body('password') newPassword: string,
+  ) {
+    return this.authService.resetPassword(token, newPassword);
+  }  
 }
