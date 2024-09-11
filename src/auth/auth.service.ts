@@ -17,12 +17,12 @@ export class AuthService {
     private mailerService: MailerService,
   ) {}
 
-  // SignUp function
+  // SignUp function - Part 1 (sending the verification link)
   async signUp(
     email: string,
     pass: string,
     username: string,
-  ): Promise<{ access_token: string; userId: string }> {
+  ): Promise<{ status: string; message: string }> {
     if (!username) {
       throw new ConflictException('Username is required');
     }
@@ -32,30 +32,67 @@ export class AuthService {
       throw new ConflictException('User with this email already exists');
     }
 
-    // Hash the password before saving the user
+    // Hash the password before saving temporarily
     const hashedPassword = await this.hashPassword(pass);
 
-    // Create the new user
-    const createdUser = await this.userService.create({
-      email,
-      password: hashedPassword,
-      username,
-      accessLevel: '',
-    });
+    // Generate a verification token (expires in 24 hours)
+    const token = await this.jwtService.signAsync(
+      { email, hashedPassword, username },
+      { expiresIn: '24h' },
+    );
 
-    // Retrieve the created user's information
-    const user = await this.userService.findOne(email);
-
-    if (!user) {
-      throw new UnauthorizedException('User not found after creation');
-    }
-
-    // Generate the JWT token
-    const payload = { sub: user.userId, username: user.username };
+    // Send verification email with the link containing the token
+    const verificationLink = `${frontendUrl}/signup?token=${token}`;
+    const backendLink = `http://localhost:3000/auth/verify-email?token=${token}`;
+    // await this.mailerService.sendMail({
+    //   to: email,
+    //   subject: 'Verify Your Email',
+    //   text: `Please verify your email by clicking the link: ${verificationLink}`,
+    // });
+    console.log(`Backend URL link: ${backendLink}`);
+    console.log(`verificationLink: ${verificationLink}`);
     return {
-      access_token: await this.jwtService.signAsync(payload),
-      userId: user.userId.toString(),
+      status: 'success',
+      // message: 'Verification email sent. Please check your inbox.',
+      message: `Please verify your email by clicking the link: ${verificationLink}`,
     };
+  }
+
+  // Verification function - Part 2 (activating the account)
+  async verifyEmail(
+    token: string,
+  ): Promise<{ access_token?: string; userId?: string; status?: string; message?: string }> {
+    try {
+      // Verify the token and extract the email, hashedPassword, and username
+      const { email, hashedPassword, username } = this.jwtService.verify(token);
+
+      // Ensure the user doesn't already exist
+      const existingUser = await this.userService.findOne(email);
+      if (existingUser) {
+        return { status: 'error', message: 'User already exists' };
+      }
+
+      // Save the user to the database now after verification
+      const createdUser = await this.userService.create({
+        email,
+        password: hashedPassword,
+        username,
+        accessLevel: '',
+      });
+
+      const payload = { sub: createdUser.userId, username: createdUser.username };
+      return {
+        access_token: await this.jwtService.signAsync(payload),
+        userId: createdUser.userId.toString(),
+        status: 'success',
+        message: 'Account verified successfully.',
+      };
+    } catch (error) {
+      return {
+        status: 'error',
+        message: 'Invalid or expired verification token.',
+      };
+    }
   }
 
   // SignIn function
@@ -116,8 +153,8 @@ export class AuthService {
       return {
         access_token: await this.jwtService.signAsync(payload),
         userId: user.userId.toString(),
-        status: 'success', 
-        message: 'Password reset successfully.'
+        status: 'success',
+        message: 'Password reset successfully.',
       };
     } catch (error) {
       return { status: 'error', message: 'Error resetting password.' };

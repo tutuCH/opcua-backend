@@ -13,6 +13,12 @@ export class Factory {
   @Column({ type: 'int' })
   factoryIndex: string;
 
+  @Column({ type: 'int' })
+  width: string;
+
+  @Column({ type: 'int' })
+  height: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

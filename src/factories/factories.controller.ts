@@ -27,8 +27,8 @@ export class FactoriesController {
     return this.factoriesService.findFactoriesByUserId(+userId);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateFactoryDto: UpdateFactoryDto) {
+  @Patch(':factoryId')
+  update(@Param('factoryId') id: string, @Body() updateFactoryDto: UpdateFactoryDto) {
     return this.factoriesService.update(+id, updateFactoryDto);
   }
 

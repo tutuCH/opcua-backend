@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   Request,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
@@ -25,13 +26,17 @@ export class AuthController {
     return this.authService.signIn(signInDto.email, signInDto.password);
   }
 
-  // Public route for user registration
   @Public()
-  @HttpCode(HttpStatus.CREATED)
-  @Post('signup')
+  @Post('sign-up')
   async signUp(@Body() signUpDto: SignUpDto) {
-    return this.authService.signUp(signUpDto.email, signUpDto.password, signUpDto.username);
-    // return { message: 'User registered successfully' };
+    const { email, password, username } = signUpDto;
+    return this.authService.signUp(email, password, username);
+  }
+
+  @Public()
+  @Get('verify-email')
+  async verifyEmail(@Query('token') token: string) {
+    return this.authService.verifyEmail(token);
   }
 
   // Protected route for getting user profile

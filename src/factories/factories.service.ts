@@ -27,6 +27,8 @@ export class FactoriesService {
       ...factoryDetails,
       user,
       factoryIndex: createFactoryDto.factoryIndex.toString(),
+      width: createFactoryDto.width.toString(),
+      height: createFactoryDto.height.toString(),
     });
     return await this.factoryRepository.save(newFactory);
   }
@@ -63,7 +65,9 @@ export class FactoriesService {
     const factory = await this.factoryRepository.preload({
       factoryId: id,
       ...updateFactoryDto,
-      factoryIndex: updateFactoryDto.factoryIndex.toString(), // Convert factoryIndex to string
+      factoryIndex: updateFactoryDto.factoryIndex.toString(),
+      width: updateFactoryDto.width.toString(),
+      height: updateFactoryDto.height.toString(),      
     });
     if (!factory) {
       throw new NotFoundException(`Factory with ID ${id} not found`);

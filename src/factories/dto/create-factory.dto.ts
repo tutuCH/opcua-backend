@@ -9,4 +9,10 @@ export class CreateFactoryDto {
 
   @IsInt()
   factoryIndex: number;  
+
+  @IsInt()
+  width: number;
+  
+  @IsInt()
+  height: number;  
 }

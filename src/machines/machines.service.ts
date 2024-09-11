@@ -142,6 +142,8 @@ export class MachinesService {
       .select([
         'factory.factoryId',
         'factory.factoryName',
+        'factory.width',
+        'factory.height',
         'machine.machineId',
         'machine.machineName',
         'machine.machineIpAddress',
@@ -160,6 +162,8 @@ export class MachinesService {
     const result = factoriesWithMachines.map(factory => ({
       factoryId: factory.factoryId,
       factoryName: factory.factoryName,
+      factoryWidth: factory.width,
+      factoryHeight: factory.height,
       machines: factory.machines.length ? factory.machines.map(machine => ({
         machineId: machine.machineId,
         machineName: machine.machineName,
