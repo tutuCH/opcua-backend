@@ -164,12 +164,14 @@ export class MachinesService {
       factoryName: factory.factoryName,
       factoryWidth: factory.width,
       factoryHeight: factory.height,
-      machines: factory.machines.length ? factory.machines.map(machine => ({
-        machineId: machine.machineId,
-        machineName: machine.machineName,
-        machineIpAddress: machine.machineIpAddress,
-        machineIndex: machine.machineIndex,
-      })) : []
+      machines: factory.machines.length ? factory.machines
+        .map(machine => ({
+          machineId: machine.machineId,
+          machineName: machine.machineName,
+          machineIpAddress: machine.machineIpAddress,
+          machineIndex: parseInt(machine.machineIndex || '0'),
+        }))
+        .sort((a, b) => a.machineIndex - b.machineIndex) : []
     }));
   
     this.logger.log(`findFactoriesAndMachinesByUserId: ${JSON.stringify(result)}`);

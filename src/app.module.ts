@@ -3,7 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 // import { RabbitmqService } from './helper/rabbitmq.service';
 // import { SubscriberService } from './helper/subscriber.service';
 import { UserModule } from './user/user.module';
-import { OpcuaModule } from './opcua/opcua.module';
+import { MqttConnectionModule } from './mqtt-connection/mqtt-connection.module';
+import { MachineTimestreamModule } from './machine-timestream/machine-timestream.service.module';
 import { User } from './user/entities/user.entity';
 import { FactoriesModule } from './factories/factories.module';
 import { MachinesModule } from './machines/machines.module';
@@ -28,9 +29,10 @@ import { UserOwnershipGuard } from './auth/strategies/user.ownership.guard';
     }),
     UserModule,
     AuthModule,
-    OpcuaModule,
     FactoriesModule,
     MachinesModule,
+    MqttConnectionModule,
+    MachineTimestreamModule,
   ],
   controllers: [],
   providers: [

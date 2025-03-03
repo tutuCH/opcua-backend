@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -23,7 +23,9 @@ export class UserService {
 
   async findOne(email: string): Promise<User> {
     try {
-      const user = await this.userRepository.findOne({ where: { email: email } });
+      const user = await this.userRepository.findOne({
+        where: { email: email },
+      });
       return user;
     } catch (error) {
       throw new Error(`Error connecting to the database: ${error.message}`);
@@ -48,5 +50,5 @@ export class UserService {
 
   async updatePassword(userId: number, newPassword: string): Promise<void> {
     await this.userRepository.update(userId, { password: newPassword });
-  }  
+  }
 }
