@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
@@ -24,22 +25,28 @@ export class MachinesService {
     private readonly factoryRepository: Repository<Factory>,
   ) {}
 
-  async create(createMachineDto: CreateMachineDto): Promise<Machine> {
-    const { userId, factoryId, ...machineDetails } = createMachineDto;
+  async create(createMachineDto: CreateMachineDto, userId: number): Promise<Machine> {
+    const { factoryId, ...machineDetails } = createMachineDto;
     try {
-      // Find the related user and factory
+      // Find the authenticated user
       const user = await this.userRepository.findOne({
         where: { userId: userId },
       });
       if (!user) {
-        throw new NotFoundException(`User with ID ${userId} not found`);
+        throw new NotFoundException(`User not found`);
       }
 
       const factory = await this.factoryRepository.findOne({
         where: { factoryId: factoryId },
+        relations: ['user'],
       });
       if (!factory) {
         throw new NotFoundException(`Factory with ID ${factoryId} not found`);
+      }
+      
+      // Verify factory ownership
+      if (factory.user.userId !== userId) {
+        throw new UnauthorizedException('You do not have access to this factory');
       }
 
       // Create a new machine entity
@@ -86,6 +93,23 @@ export class MachinesService {
     return machine;
   }
 
+  async findOneForUser(id: number, userId: number): Promise<Machine> {
+    const machine = await this.machineRepository.findOne({
+      where: { machineId: id },
+      relations: ['user', 'factory'],
+    });
+    
+    if (!machine) {
+      throw new NotFoundException(`Machine with ID ${id} not found`);
+    }
+    
+    if (machine.user.userId !== userId) {
+      throw new UnauthorizedException('You do not have access to this machine');
+    }
+    
+    return machine;
+  }
+
   async update(
     id: number,
     updateMachineDto: UpdateMachineDto,
@@ -97,6 +121,18 @@ export class MachinesService {
     if (!machine) {
       throw new NotFoundException(`Machine with ID ${id} not found`);
     }
+    return await this.machineRepository.save(machine);
+  }
+
+  async updateForUser(id: number, updateMachineDto: UpdateMachineDto, userId: number): Promise<Machine> {
+    // First verify ownership
+    await this.findOneForUser(id, userId);
+    
+    const machine = await this.machineRepository.preload({
+      machineId: id,
+      ...updateMachineDto,
+    });
+    
     return await this.machineRepository.save(machine);
   }
 
@@ -125,11 +161,41 @@ export class MachinesService {
     }
   }
 
+  async updateIndexForUser(id: number, index: number, userId: number): Promise<any> {
+    // First verify ownership
+    await this.findOneForUser(id, userId);
+    
+    try {
+      const machine = await this.findOne(id);
+      machine.machineIndex = index.toString();
+      await this.machineRepository.save(machine);
+      return {
+        message: `Machine with ID ${id} successfully updated. New machineIndex: ${machine.machineIndex}`,
+        status: 'success',
+        machineId: machine.machineId,
+        machineIndex: parseInt(machine.machineIndex),
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('An unexpected error occurred');
+    }
+  }
+
   async remove(id: number): Promise<string> {
     const machine = await this.findOne(id);
     if (!machine) {
       return `Machine with ID ${id} not found.`;
     }
+    await this.machineRepository.remove(machine);
+    return `Machine with ID ${id} successfully removed.`;
+  }
+
+  async removeForUser(id: number, userId: number): Promise<string> {
+    // First verify ownership
+    const machine = await this.findOneForUser(id, userId);
+    
     await this.machineRepository.remove(machine);
     return `Machine with ID ${id} successfully removed.`;
   }

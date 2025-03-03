@@ -2,38 +2,43 @@ import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/commo
 import { FactoriesService } from './factories.service';
 import { CreateFactoryDto } from './dto/create-factory.dto';
 import { UpdateFactoryDto } from './dto/update-factory.dto';
+import { JwtUserId } from '../auth/decorators/jwt-user-id.decorator';
 
 @Controller('factories')
 export class FactoriesController {
   constructor(private readonly factoriesService: FactoriesService) {}
 
   @Post()
-  create(@Body() createFactoryDto: CreateFactoryDto) {
-    return this.factoriesService.create(createFactoryDto);
+  create(@Body() createFactoryDto: CreateFactoryDto, @JwtUserId() userId: number) {
+    return this.factoriesService.create(createFactoryDto, userId);
   }
 
   @Get()
-  findAll() {
-    return this.factoriesService.findAll();
+  findAll(@JwtUserId() userId: number) {
+    return this.factoriesService.findAllForUser(userId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.factoriesService.findOne(+id);
+  findOne(@Param('id') id: string, @JwtUserId() userId: number) {
+    return this.factoriesService.findOneForUser(+id, userId);
   }
 
-  @Get(':userId')
-  findFactoriesByUserId(@Param('userId') userId: string) {
-    return this.factoriesService.findFactoriesByUserId(+userId);
+  @Get('user/factories')
+  findFactoriesByUserId(@JwtUserId() userId: number) {
+    return this.factoriesService.findFactoriesByUserId(userId);
   }
 
   @Patch(':factoryId')
-  update(@Param('factoryId') id: string, @Body() updateFactoryDto: UpdateFactoryDto) {
-    return this.factoriesService.update(+id, updateFactoryDto);
+  update(
+    @Param('factoryId') id: string, 
+    @Body() updateFactoryDto: UpdateFactoryDto, 
+    @JwtUserId() userId: number
+  ) {
+    return this.factoriesService.updateForUser(+id, updateFactoryDto, userId);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.factoriesService.remove(+id);
+  remove(@Param('id') id: string, @JwtUserId() userId: number) {
+    return this.factoriesService.removeForUser(+id, userId);
   }
 }

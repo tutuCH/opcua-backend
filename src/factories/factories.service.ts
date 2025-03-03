@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateFactoryDto } from './dto/create-factory.dto';
@@ -15,8 +15,7 @@ export class FactoriesService {
     private readonly userRepository: Repository<User>,
   ) {}
 
-  async create(createFactoryDto: CreateFactoryDto): Promise<Factory> {
-    const { userId, ...factoryDetails } = createFactoryDto;
+  async create(createFactoryDto: CreateFactoryDto, userId: number): Promise<Factory> {
     const user = await this.userRepository.findOne({
       where: { userId: userId },
     });
@@ -24,7 +23,7 @@ export class FactoriesService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }    
     const newFactory = this.factoryRepository.create({
-      ...factoryDetails,
+      ...createFactoryDto,
       user,
       factoryIndex: createFactoryDto.factoryIndex.toString(),
       width: createFactoryDto.width.toString(),
@@ -33,15 +32,42 @@ export class FactoriesService {
     return await this.factoryRepository.save(newFactory);
   }
 
+  async findAllForUser(userId: number): Promise<Factory[]> {
+    return await this.factoryRepository.find({ 
+      where: { user: { userId } },
+      relations: ['machines'] 
+    });
+  }
+
   async findAll(): Promise<Factory[]> {
     return await this.factoryRepository.find({ relations: ['machines'] });
   }
 
   async findOne(id: number): Promise<Factory> {
-    const factory = await this.factoryRepository.findOne({ where: { factoryId: id }, relations: ['machines'] });
+    const factory = await this.factoryRepository.findOne({ 
+      where: { factoryId: id }, 
+      relations: ['machines', 'user'] 
+    });
     if (!factory) {
       throw new NotFoundException(`Factory with ID ${id} not found`);
     }
+    return factory;
+  }
+
+  async findOneForUser(id: number, userId: number): Promise<Factory> {
+    const factory = await this.factoryRepository.findOne({ 
+      where: { factoryId: id },
+      relations: ['machines', 'user'] 
+    });
+    
+    if (!factory) {
+      throw new NotFoundException(`Factory with ID ${id} not found`);
+    }
+    
+    if (factory.user.userId !== userId) {
+      throw new UnauthorizedException('You do not have access to this factory');
+    }
+    
     return factory;
   }
 
@@ -53,12 +79,21 @@ export class FactoriesService {
       .orderBy('factory.createdAt', 'DESC')
       .getMany();
     
-    if (!factories.length) {
-      throw new NotFoundException(`Factories for userId ${userId} not found`);
-    }
-
-    console.log(JSON.stringify(factories));
     return factories;
+  }
+
+  async updateForUser(id: number, updateFactoryDto: UpdateFactoryDto, userId: number): Promise<Factory> {
+    await this.findOneForUser(id, userId);
+
+    const factory = await this.factoryRepository.preload({
+      factoryId: id,
+      ...updateFactoryDto,
+      factoryIndex: updateFactoryDto.factoryIndex.toString(),
+      width: updateFactoryDto.width.toString(),
+      height: updateFactoryDto.height.toString(),      
+    });
+    
+    return await this.factoryRepository.save(factory);
   }
 
   async update(id: number, updateFactoryDto: UpdateFactoryDto): Promise<Factory> {
@@ -73,6 +108,14 @@ export class FactoriesService {
       throw new NotFoundException(`Factory with ID ${id} not found`);
     }
     return await this.factoryRepository.save(factory);
+  }
+
+  async removeForUser(id: number, userId: number): Promise<void> {
+    // First check if the factory exists and belongs to this user
+    const factory = await this.findOneForUser(id, userId);
+    
+    // Remove the factory
+    await this.factoryRepository.remove(factory);
   }
 
   async remove(id: number): Promise<void> {

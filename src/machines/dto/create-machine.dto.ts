@@ -1,4 +1,4 @@
-import { IsString, IsInt, IsOptional } from 'class-validator';
+import { IsString, IsInt, IsOptional, IsNumber } from 'class-validator';
 
 export class CreateMachineDto {
   @IsString()
@@ -10,10 +10,7 @@ export class CreateMachineDto {
   @IsString()
   machineIndex: string;
   
-  @IsInt()
-  userId: number;
-
-  @IsInt()
+  @IsNumber()
   factoryId: number;
 
   @IsInt()
