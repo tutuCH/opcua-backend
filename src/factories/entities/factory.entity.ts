@@ -1,4 +1,11 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, OneToMany, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  OneToMany,
+  ManyToOne,
+} from 'typeorm';
 import { Machine } from './../../machines/entities/machine.entity';
 import { User } from 'src/user/entities/user.entity';
 
@@ -23,8 +30,8 @@ export class Factory {
   createdAt: Date;
 
   @ManyToOne(() => User, (user) => user.factory)
-  user: User;  
-  
+  user: User;
+
   @OneToMany(() => Machine, (machine) => machine.factory)
   machines: Machine[];
 }

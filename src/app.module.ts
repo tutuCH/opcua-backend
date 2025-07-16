@@ -43,8 +43,8 @@ import { UserOwnershipGuard } from './auth/strategies/user.ownership.guard';
     {
       provide: APP_GUARD,
       useClass: UserOwnershipGuard,
-    },    
-  ],  
+    },
+  ],
   // providers: [SubscriberService],
 })
 export class AppModule {}

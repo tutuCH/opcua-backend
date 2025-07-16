@@ -1,4 +1,10 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, OneToMany } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  CreateDateColumn,
+  OneToMany,
+} from 'typeorm';
 import { Machine } from './../../machines/entities/machine.entity';
 import { Factory } from '../../factories/entities/factory.entity';
 
@@ -17,7 +23,7 @@ export class User {
   password: string;
 
   @Column({ type: 'varchar', length: 255 })
-  accessLevel: string;  
+  accessLevel: string;
 
   @CreateDateColumn()
   createdAt: Date;
@@ -26,5 +32,5 @@ export class User {
   machines: Machine[];
 
   @OneToMany(() => Factory, (factory) => factory.user)
-  factory: Factory[];  
+  factory: Factory[];
 }

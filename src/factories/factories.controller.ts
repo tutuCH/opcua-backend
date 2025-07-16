@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { FactoriesService } from './factories.service';
 import { CreateFactoryDto } from './dto/create-factory.dto';
 import { UpdateFactoryDto } from './dto/update-factory.dto';
@@ -9,7 +17,10 @@ export class FactoriesController {
   constructor(private readonly factoriesService: FactoriesService) {}
 
   @Post()
-  create(@Body() createFactoryDto: CreateFactoryDto, @JwtUserId() userId: number) {
+  create(
+    @Body() createFactoryDto: CreateFactoryDto,
+    @JwtUserId() userId: number,
+  ) {
     return this.factoriesService.create(createFactoryDto, userId);
   }
 
@@ -30,9 +41,9 @@ export class FactoriesController {
 
   @Patch(':factoryId')
   update(
-    @Param('factoryId') id: string, 
-    @Body() updateFactoryDto: UpdateFactoryDto, 
-    @JwtUserId() userId: number
+    @Param('factoryId') id: string,
+    @Body() updateFactoryDto: UpdateFactoryDto,
+    @JwtUserId() userId: number,
   ) {
     return this.factoriesService.updateForUser(+id, updateFactoryDto, userId);
   }

@@ -24,20 +24,34 @@ export class CognitoStrategy extends PassportStrategy(Strategy, 'cognito') {
   }
 
   private async initializeClient() {
-    console.log('initializing client in strategy')
-    console.log('COGNITO_DOMAIN', this.configService.get('COGNITO_DOMAIN'))
-    console.log('COGNITO_CLIENT_ID', this.configService.get('COGNITO_CLIENT_ID'))
-    console.log('COGNITO_CLIENT_SECRET', this.configService.get('COGNITO_CLIENT_SECRET'))
-    console.log('COGNITO_CALLBACK_URL', this.configService.get('COGNITO_CALLBACK_URL'))
-    console.log('COGNITO_ISSUER_URL', this.configService.get('COGNITO_ISSUER_URL'))
-    const issuer = await Issuer.discover(this.configService.get('COGNITO_ISSUER_URL'));
+    console.log('initializing client in strategy');
+    console.log('COGNITO_DOMAIN', this.configService.get('COGNITO_DOMAIN'));
+    console.log(
+      'COGNITO_CLIENT_ID',
+      this.configService.get('COGNITO_CLIENT_ID'),
+    );
+    console.log(
+      'COGNITO_CLIENT_SECRET',
+      this.configService.get('COGNITO_CLIENT_SECRET'),
+    );
+    console.log(
+      'COGNITO_CALLBACK_URL',
+      this.configService.get('COGNITO_CALLBACK_URL'),
+    );
+    console.log(
+      'COGNITO_ISSUER_URL',
+      this.configService.get('COGNITO_ISSUER_URL'),
+    );
+    const issuer = await Issuer.discover(
+      this.configService.get('COGNITO_ISSUER_URL'),
+    );
     this.client = new issuer.Client({
       client_id: this.configService.get('COGNITO_CLIENT_ID'),
       client_secret: this.configService.get('COGNITO_CLIENT_SECRET'),
       redirect_uris: [this.configService.get('COGNITO_CALLBACK_URL')],
       response_types: ['code'],
     });
-    console.log('client initialized in strategy')
+    console.log('client initialized in strategy');
   }
 
   async validate(accessToken: string): Promise<any> {
@@ -48,4 +62,4 @@ export class CognitoStrategy extends PassportStrategy(Strategy, 'cognito') {
       username: userInfo.username,
     };
   }
-} 
+}

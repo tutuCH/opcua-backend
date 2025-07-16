@@ -12,8 +12,10 @@ export class RabbitmqService implements OnModuleDestroy {
     await this.channel.assertQueue('opcua_data', { durable: true });
   }
 
-  async publishOpcUaData(message: String) {
-    this.channel.sendToQueue('opcua_data', Buffer.from(message), { persistent: true });
+  async publishOpcUaData(message: string) {
+    this.channel.sendToQueue('opcua_data', Buffer.from(message), {
+      persistent: true,
+    });
   }
 
   async onModuleDestroy() {

@@ -9,7 +9,7 @@ export class CreateMachineDto {
 
   @IsString()
   machineIndex: string;
-  
+
   @IsNumber()
   factoryId: number;
 

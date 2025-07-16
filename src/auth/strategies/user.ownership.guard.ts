@@ -1,4 +1,9 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
@@ -20,8 +25,10 @@ export class UserOwnershipGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const userIdFromParams = Number(request.params.userId);
     const userIdFromToken = request.user?.userId;
-    if (userIdFromParams && userIdFromParams!== userIdFromToken) {
-      throw new UnauthorizedException('You do not have access to this resource');
+    if (userIdFromParams && userIdFromParams !== userIdFromToken) {
+      throw new UnauthorizedException(
+        'You do not have access to this resource',
+      );
     }
     return true;
   }

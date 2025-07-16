@@ -3,7 +3,9 @@ import { MachineTimestreamService } from './machine-timestream.service';
 
 @Controller('machine-timestream')
 export class MachineTimestreamController {
-  constructor(private readonly machineTimestreamService: MachineTimestreamService) {}
+  constructor(
+    private readonly machineTimestreamService: MachineTimestreamService,
+  ) {}
 
   @Post()
   async loadDemoDataToAwsTimestream() {

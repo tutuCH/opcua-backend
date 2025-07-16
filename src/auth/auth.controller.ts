@@ -58,5 +58,5 @@ export class AuthController {
     @Body('password') newPassword: string,
   ) {
     return this.authService.resetPassword(token, newPassword);
-  }  
+  }
 }

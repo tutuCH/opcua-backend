@@ -8,14 +8,17 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
     origin: ['http://localhost:3030', 'https://opcua-frontend.vercel.app'],
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     credentials: true,
   });
   // Get Reflector instance from the app context
   const reflector = app.get(Reflector);
 
   // Apply JwtAuthGuard globally
-  app.useGlobalGuards(new JwtAuthGuard(reflector), new UserOwnershipGuard(reflector));
+  app.useGlobalGuards(
+    new JwtAuthGuard(reflector),
+    new UserOwnershipGuard(reflector),
+  );
   await app.listen(3000);
 }
 bootstrap();

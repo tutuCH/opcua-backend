@@ -59,9 +59,12 @@ export class AuthService {
   }
 
   // Verification function - Part 2 (activating the account)
-  async verifyEmail(
-    token: string,
-  ): Promise<{ access_token?: string; userId?: string; status?: string; message?: string }> {
+  async verifyEmail(token: string): Promise<{
+    access_token?: string;
+    userId?: string;
+    status?: string;
+    message?: string;
+  }> {
     try {
       // Verify the token and extract the email, hashedPassword, and username
       const { email, hashedPassword, username } = this.jwtService.verify(token);
@@ -80,7 +83,10 @@ export class AuthService {
         accessLevel: '',
       });
 
-      const payload = { sub: createdUser.userId, username: createdUser.username };
+      const payload = {
+        sub: createdUser.userId,
+        username: createdUser.username,
+      };
       return {
         access_token: await this.jwtService.signAsync(payload),
         userId: createdUser.userId.toString(),

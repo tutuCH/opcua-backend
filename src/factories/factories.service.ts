@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateFactoryDto } from './dto/create-factory.dto';
@@ -15,13 +19,16 @@ export class FactoriesService {
     private readonly userRepository: Repository<User>,
   ) {}
 
-  async create(createFactoryDto: CreateFactoryDto, userId: number): Promise<Factory> {
+  async create(
+    createFactoryDto: CreateFactoryDto,
+    userId: number,
+  ): Promise<Factory> {
     const user = await this.userRepository.findOne({
       where: { userId: userId },
     });
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
-    }    
+    }
     const newFactory = this.factoryRepository.create({
       ...createFactoryDto,
       user,
@@ -33,9 +40,9 @@ export class FactoriesService {
   }
 
   async findAllForUser(userId: number): Promise<Factory[]> {
-    return await this.factoryRepository.find({ 
+    return await this.factoryRepository.find({
       where: { user: { userId } },
-      relations: ['machines'] 
+      relations: ['machines'],
     });
   }
 
@@ -44,9 +51,9 @@ export class FactoriesService {
   }
 
   async findOne(id: number): Promise<Factory> {
-    const factory = await this.factoryRepository.findOne({ 
-      where: { factoryId: id }, 
-      relations: ['machines', 'user'] 
+    const factory = await this.factoryRepository.findOne({
+      where: { factoryId: id },
+      relations: ['machines', 'user'],
     });
     if (!factory) {
       throw new NotFoundException(`Factory with ID ${id} not found`);
@@ -55,34 +62,39 @@ export class FactoriesService {
   }
 
   async findOneForUser(id: number, userId: number): Promise<Factory> {
-    const factory = await this.factoryRepository.findOne({ 
+    const factory = await this.factoryRepository.findOne({
       where: { factoryId: id },
-      relations: ['machines', 'user'] 
+      relations: ['machines', 'user'],
     });
-    
+
     if (!factory) {
       throw new NotFoundException(`Factory with ID ${id} not found`);
     }
-    
+
     if (factory.user.userId !== userId) {
       throw new UnauthorizedException('You do not have access to this factory');
     }
-    
+
     return factory;
   }
 
   async findFactoriesByUserId(userId: number): Promise<Factory[]> {
-    const factories = await this.factoryRepository.createQueryBuilder('factory')
+    const factories = await this.factoryRepository
+      .createQueryBuilder('factory')
       .select(['factory.factoryId', 'factory.factoryName', 'factory.createdAt'])
       .innerJoin('factory.user', 'user')
       .where('user.userId = :userId', { userId })
       .orderBy('factory.createdAt', 'DESC')
       .getMany();
-    
+
     return factories;
   }
 
-  async updateForUser(id: number, updateFactoryDto: UpdateFactoryDto, userId: number): Promise<Factory> {
+  async updateForUser(
+    id: number,
+    updateFactoryDto: UpdateFactoryDto,
+    userId: number,
+  ): Promise<Factory> {
     await this.findOneForUser(id, userId);
 
     const factory = await this.factoryRepository.preload({
@@ -90,19 +102,22 @@ export class FactoriesService {
       ...updateFactoryDto,
       factoryIndex: updateFactoryDto.factoryIndex.toString(),
       width: updateFactoryDto.width.toString(),
-      height: updateFactoryDto.height.toString(),      
+      height: updateFactoryDto.height.toString(),
     });
-    
+
     return await this.factoryRepository.save(factory);
   }
 
-  async update(id: number, updateFactoryDto: UpdateFactoryDto): Promise<Factory> {
+  async update(
+    id: number,
+    updateFactoryDto: UpdateFactoryDto,
+  ): Promise<Factory> {
     const factory = await this.factoryRepository.preload({
       factoryId: id,
       ...updateFactoryDto,
       factoryIndex: updateFactoryDto.factoryIndex.toString(),
       width: updateFactoryDto.width.toString(),
-      height: updateFactoryDto.height.toString(),      
+      height: updateFactoryDto.height.toString(),
     });
     if (!factory) {
       throw new NotFoundException(`Factory with ID ${id} not found`);
@@ -113,7 +128,7 @@ export class FactoriesService {
   async removeForUser(id: number, userId: number): Promise<void> {
     // First check if the factory exists and belongs to this user
     const factory = await this.findOneForUser(id, userId);
-    
+
     // Remove the factory
     await this.factoryRepository.remove(factory);
   }

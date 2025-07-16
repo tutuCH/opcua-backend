@@ -14,18 +14,18 @@ import { emailAddress, emailPassword } from './strategies/constants';
     PassportModule,
     MailerModule.forRoot({
       transport: {
-        host: 'smtp.gmail.com',  // Gmail's SMTP server
-        port: 587,  // Port for TLS
-        secure: false,  // Set to true if using port 465 (for SSL), otherwise false for 587
+        host: 'smtp.gmail.com', // Gmail's SMTP server
+        port: 587, // Port for TLS
+        secure: false, // Set to true if using port 465 (for SSL), otherwise false for 587
         auth: {
-          user: emailAddress,  // Your Gmail address
-          pass: emailPassword,  // Your Gmail password or App password
+          user: emailAddress, // Your Gmail address
+          pass: emailPassword, // Your Gmail password or App password
         },
       },
       defaults: {
-        from: `"No Reply" <${emailAddress}>`,  // Default 'from' address
+        from: `"No Reply" <${emailAddress}>`, // Default 'from' address
       },
-    }),    
+    }),
     JwtModule.register({
       secret: jwtConstants.secret,
       signOptions: { expiresIn: '7d' },

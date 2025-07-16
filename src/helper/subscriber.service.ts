@@ -1,5 +1,10 @@
 // src/rabbitmq/rabbitmq-subscriber.service.ts
-import { Injectable, OnModuleDestroy, OnModuleInit, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  OnModuleDestroy,
+  OnModuleInit,
+  Logger,
+} from '@nestjs/common';
 import * as amqp from 'amqplib';
 
 @Injectable()

@@ -5,11 +5,11 @@ export class CreateFactoryDto {
   factoryName: string;
 
   @IsInt()
-  factoryIndex: number;  
+  factoryIndex: number;
 
   @IsInt()
   width: number;
-  
+
   @IsInt()
-  height: number;  
+  height: number;
 }
