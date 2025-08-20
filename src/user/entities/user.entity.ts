@@ -4,9 +4,11 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   OneToMany,
+  OneToOne,
 } from 'typeorm';
 import { Machine } from './../../machines/entities/machine.entity';
 import { Factory } from '../../factories/entities/factory.entity';
+import { UserSubscription } from '../../subscription/entities/user-subscription.entity';
 
 @Entity()
 export class User {
@@ -25,6 +27,14 @@ export class User {
   @Column({ type: 'varchar', length: 255 })
   accessLevel: string;
 
+  @Column({
+    name: 'stripe_customer_id',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  stripeCustomerId: string;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -33,4 +43,7 @@ export class User {
 
   @OneToMany(() => Factory, (factory) => factory.user)
   factory: Factory[];
+
+  @OneToOne(() => UserSubscription, (subscription) => subscription.user)
+  subscription: UserSubscription;
 }

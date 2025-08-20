@@ -8,6 +8,7 @@ import { MachineTimestreamModule } from './machine-timestream/machine-timestream
 import { User } from './user/entities/user.entity';
 import { FactoriesModule } from './factories/factories.module';
 import { MachinesModule } from './machines/machines.module';
+import { SubscriptionModule } from './subscription/subscription.module';
 import { Factory } from './factories/entities/factory.entity';
 import { Machine } from './machines/entities/machine.entity';
 import { AuthModule } from './auth/auth.module';
@@ -31,6 +32,7 @@ import { UserOwnershipGuard } from './auth/strategies/user.ownership.guard';
     AuthModule,
     FactoriesModule,
     MachinesModule,
+    SubscriptionModule,
     MqttConnectionModule,
     MachineTimestreamModule,
   ],
