@@ -1,0 +1,130 @@
+
+services:
+  # PostgreSQL Database for metadata
+  postgres:
+    image: postgres:15-alpine
+    container_name: opcua-postgres
+    environment:
+      POSTGRES_DB: opcua_dashboard
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - opcua-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # InfluxDB for time-series data
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: opcua-influxdb
+    environment:
+      INFLUXDB_DB: machine_data
+      INFLUXDB_ADMIN_USER: admin
+      INFLUXDB_ADMIN_PASSWORD: password
+      INFLUXDB_USER: opcua_user
+      INFLUXDB_USER_PASSWORD: opcua_password
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: password
+      DOCKER_INFLUXDB_INIT_ORG: opcua-org
+      DOCKER_INFLUXDB_INIT_BUCKET: machine-data
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: dev-token-super-secret-admin-token
+      DOCKER_INFLUXDB_INIT_RETENTION: 1h
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+      - influxdb_config:/etc/influxdb2
+    networks:
+      - opcua-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and message queue
+  redis:
+    image: redis:7-alpine
+    container_name: opcua-redis
+    command: redis-server --appendonly yes --requirepass password
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - opcua-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MQTT Broker (Mosquitto)
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: opcua-mosquitto
+    ports:
+      - "1884:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+      - mosquitto_data:/mosquitto/data
+    networks:
+      - opcua-network
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -t test -m 'health check' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Mock Data Generator Service - DISABLED
+  # The main NestJS application handles mock data generation
+  # mock-generator:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.mock
+  #   container_name: opcua-mock-generator
+  #   environment:
+  #     MQTT_BROKER_URL: mqtt://mosquitto:1883
+  #     POSTGRES_HOST: postgres
+  #     POSTGRES_PORT: 5432
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: password
+  #     POSTGRES_DB: opcua_dashboard
+  #     MOCK_MACHINES_COUNT: 3
+  #     MOCK_DATA_INTERVAL: 5000
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     mosquitto:
+  #       condition: service_healthy
+  #   networks:
+  #     - opcua-network
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  influxdb_data:
+    driver: local
+  influxdb_config:
+    driver: local
+  redis_data:
+    driver: local
+  mosquitto_data:
+    driver: local
+
+networks:
+  opcua-network:
+    driver: bridge

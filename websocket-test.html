@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test - OPC UA Dashboard</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .message { margin: 10px 0; padding: 10px; border-radius: 5px; font-size: 12px; }
+        .realtime { background-color: #e8f5e8; }
+        .spc { background-color: #e8f0ff; }
+        .status-msg { background-color: #fff3cd; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .controls { margin: 20px 0; }
+        .controls button { margin: 5px; padding: 8px 16px; }
+        pre { white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+    <h2>WebSocket Test - OPC UA Dashboard</h2>
+    <div id="status" class="status disconnected">Disconnected</div>
+
+    <div class="controls">
+        <input type="text" id="deviceId" value="postgres machine 1" placeholder="Device ID">
+        <button onclick="subscribe()">Subscribe</button>
+        <button onclick="unsubscribe()">Unsubscribe</button>
+        <button onclick="getStatus()">Get Status</button>
+        <button onclick="getHistory()">Get History</button>
+        <button onclick="ping()">Ping</button>
+        <button onclick="clearMessages()">Clear Messages</button>
+    </div>
+
+    <div>
+        <strong>Subscribed Machines:</strong> <span id="subscribed">None</span>
+    </div>
+
+    <h3>Messages:</h3>
+    <div id="messages"></div>
+
+    <script>
+        let socket;
+        let subscribedMachines = new Set();
+
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        const subscribedSpan = document.getElementById('subscribed');
+
+        function updateSubscribedDisplay() {
+            subscribedSpan.textContent = subscribedMachines.size > 0 ?
+                Array.from(subscribedMachines).join(', ') : 'None';
+        }
+
+        function addMessage(type, data) {
+            const timestamp = new Date().toLocaleTimeString();
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+
+            let content = `<strong>[${timestamp}] ${type}:</strong><br>`;
+            if (typeof data === 'object') {
+                content += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } else {
+                content += data;
+            }
+
+            msg.innerHTML = content;
+            messagesDiv.insertBefore(msg, messagesDiv.firstChild);
+
+            // Keep only last 20 messages
+            while (messagesDiv.children.length > 20) {
+                messagesDiv.removeChild(messagesDiv.lastChild);
+            }
+        }
+
+        function connectSocket() {
+            console.log('Attempting to connect to WebSocket...');
+
+            socket = io('http://localhost:3000', {
+                transports: ['websocket'],
+                autoConnect: true
+            });
+
+            socket.on('connect', () => {
+                console.log('✓ Connected to WebSocket server');
+                statusDiv.textContent = 'Connected';
+                statusDiv.className = 'status connected';
+                addMessage('connection', 'Connected to WebSocket server');
+            });
+
+            socket.on('disconnect', (reason) => {
+                console.log('✗ Disconnected:', reason);
+                statusDiv.textContent = `Disconnected (${reason})`;
+                statusDiv.className = 'status disconnected';
+                addMessage('disconnect', `Disconnected: ${reason}`);
+                subscribedMachines.clear();
+                updateSubscribedDisplay();
+            });
+
+            socket.on('connect_error', (error) => {
+                console.error('✗ Connection error:', error);
+                addMessage('error', `Connection error: ${error.message}`);
+            });
+
+            // Data event handlers
+            socket.on('realtime-update', (data) => {
+                console.log('✓ Realtime update:', data);
+                addMessage('realtime', data);
+            });
+
+            socket.on('spc-update', (data) => {
+                console.log('✓ SPC update:', data);
+                addMessage('spc', data);
+            });
+
+            socket.on('machine-status', (data) => {
+                console.log('✓ Machine status:', data);
+                addMessage('status-msg', data);
+            });
+
+            socket.on('machine-history', (data) => {
+                console.log('✓ Machine history:', data);
+                addMessage('status-msg', data);
+            });
+
+            socket.on('subscription-confirmed', (data) => {
+                console.log('✓ Subscription confirmed:', data);
+                subscribedMachines.add(data.deviceId);
+                updateSubscribedDisplay();
+                addMessage('status-msg', data);
+            });
+
+            socket.on('unsubscription-confirmed', (data) => {
+                console.log('✓ Unsubscription confirmed:', data);
+                subscribedMachines.delete(data.deviceId);
+                updateSubscribedDisplay();
+                addMessage('status-msg', data);
+            });
+
+            socket.on('machine-alert', (data) => {
+                console.warn('⚠️ Machine alert:', data);
+                addMessage('error', data);
+            });
+
+            socket.on('pong', (data) => {
+                console.log('✓ Pong received:', data);
+                addMessage('status-msg', `Pong: ${data.timestamp}`);
+            });
+
+            socket.on('error', (error) => {
+                console.error('✗ Socket error:', error);
+                addMessage('error', error);
+            });
+        }
+
+        function subscribe() {
+            const deviceId = document.getElementById('deviceId').value;
+            if (!deviceId || !socket || !socket.connected) {
+                addMessage('error', 'Not connected or no device ID');
+                return;
+            }
+            console.log(`Subscribing to machine: ${deviceId}`);
+            socket.emit('subscribe-machine', { deviceId });
+        }
+
+        function unsubscribe() {
+            const deviceId = document.getElementById('deviceId').value;
+            if (!deviceId || !socket || !socket.connected) {
+                addMessage('error', 'Not connected or no device ID');
+                return;
+            }
+            console.log(`Unsubscribing from machine: ${deviceId}`);
+            socket.emit('unsubscribe-machine', { deviceId });
+        }
+
+        function getStatus() {
+            const deviceId = document.getElementById('deviceId').value;
+            if (!deviceId || !socket || !socket.connected) {
+                addMessage('error', 'Not connected or no device ID');
+                return;
+            }
+            console.log(`Requesting status for machine: ${deviceId}`);
+            socket.emit('get-machine-status', { deviceId });
+        }
+
+        function getHistory() {
+            const deviceId = document.getElementById('deviceId').value;
+            if (!deviceId || !socket || !socket.connected) {
+                addMessage('error', 'Not connected or no device ID');
+                return;
+            }
+            console.log(`Requesting history for machine: ${deviceId}`);
+            socket.emit('get-machine-history', { deviceId, timeRange: '-1h' });
+        }
+
+        function ping() {
+            if (!socket || !socket.connected) {
+                addMessage('error', 'Not connected');
+                return;
+            }
+            console.log('Sending ping...');
+            socket.emit('ping');
+        }
+
+        function clearMessages() {
+            messagesDiv.innerHTML = '';
+        }
+
+        // Auto-connect on page load
+        connectSocket();
+
+        // Auto-subscribe to test machine after connection
+        setTimeout(() => {
+            if (socket && socket.connected) {
+                subscribe();
+                getStatus();
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

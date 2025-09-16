@@ -2,7 +2,9 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
+  Param,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -57,5 +59,17 @@ export class BillingSubscriptionController {
   @Get('payment-methods')
   async getPaymentMethods(@JwtUserId() userId: number) {
     return this.billingSubscriptionService.getPaymentMethods(userId);
+  }
+
+  @Delete(':subscriptionId')
+  @HttpCode(HttpStatus.OK)
+  async cancelSubscription(
+    @Param('subscriptionId') subscriptionId: string,
+    @JwtUserId() userId: number,
+  ) {
+    return this.billingSubscriptionService.cancelSubscription(
+      subscriptionId,
+      userId,
+    );
   }
 }

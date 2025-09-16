@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 // import { RabbitmqService } from './helper/rabbitmq.service';
 // import { SubscriberService } from './helper/subscriber.service';
 import { UserModule } from './user/user.module';
@@ -15,19 +16,53 @@ import { AuthModule } from './auth/auth.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/strategies/auth.guard';
 import { UserOwnershipGuard } from './auth/strategies/user.ownership.guard';
+import { InfluxDBModule } from './influxdb/influxdb.module';
+import { RedisModule } from './redis/redis.module';
+import { WebSocketModule } from './websocket/websocket.module';
+import { MqttProcessorModule } from './mqtt-processor/mqtt-processor.module';
+import { MockDataModule } from './mock-data/mock-data.module';
+import { AppConfigModule } from './config/config.module';
+import { HealthModule } from './health/health.module';
+import { DemoModule } from './demo/demo.module';
+import { DebugModule } from './debug/debug.module';
 @Module({
   imports: [
-    TypeOrmModule.forRoot({
-      type: 'mysql',
-      host: 'localhost',
-      port: 3306,
-      username: 'root',
-      password: 'root',
-      database: 'opcuadashboard',
-      entities: [User, Factory, Machine],
-      synchronize: true,
-      autoLoadEntities: true,
+    // Configuration Module (global)
+    AppConfigModule,
+
+    // Database Connection (PostgreSQL - replaces MySQL)
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        type: 'postgres',
+        host: configService.get('database.postgres.host'),
+        port: configService.get('database.postgres.port'),
+        username: configService.get('database.postgres.username'),
+        password: configService.get('database.postgres.password'),
+        database: configService.get('database.postgres.database'),
+        entities: [User, Factory, Machine],
+        synchronize: configService.get('app.environment') !== 'production',
+        autoLoadEntities: true,
+        ssl: configService.get('app.isProduction')
+          ? { rejectUnauthorized: false }
+          : false,
+      }),
     }),
+
+    // MIGRATION NOTE: Old MySQL Configuration (commented out for reference)
+    // TypeOrmModule.forRoot({
+    //   type: 'mysql',
+    //   host: 'localhost',
+    //   port: 3306,
+    //   username: 'root',
+    //   password: 'root',
+    //   database: 'opcuadashboard',
+    //   entities: [User, Factory, Machine],
+    //   synchronize: true,
+    //   autoLoadEntities: true,
+    // }),
+
+    // Application Modules
     UserModule,
     AuthModule,
     FactoriesModule,
@@ -35,6 +70,20 @@ import { UserOwnershipGuard } from './auth/strategies/user.ownership.guard';
     SubscriptionModule,
     MqttConnectionModule,
     MachineTimestreamModule,
+
+    // Demo MQTT Server Integration Modules
+    InfluxDBModule,
+    RedisModule,
+    WebSocketModule,
+    MqttProcessorModule,
+    MockDataModule,
+
+    // Demo & Health Monitoring Modules
+    HealthModule,
+    DemoModule,
+
+    // Development Debug Module (remove in production)
+    DebugModule,
   ],
   controllers: [],
   providers: [

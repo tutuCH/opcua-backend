@@ -16,7 +16,9 @@ import { CreatePortalSessionDto } from './dto/create-portal-session.dto';
 @Injectable()
 export class BillingSubscriptionService {
   private readonly logger = new Logger(BillingSubscriptionService.name);
-  private readonly stripe: Stripe;
+  private stripe: Stripe | null;
+  private readonly isProduction: boolean;
+  private stripeConnectionValid = false;
 
   constructor(
     @InjectRepository(User)
@@ -25,18 +27,141 @@ export class BillingSubscriptionService {
     private readonly subscriptionRepository: Repository<UserSubscription>,
     private readonly configService: ConfigService,
   ) {
-    this.stripe = new Stripe(
-      this.configService.get<string>('STRIPE_SECRET_KEY'),
-      {
+    this.isProduction =
+      this.configService.get('app.environment') === 'production';
+    this.initializeStripe();
+  }
+
+  private async initializeStripe() {
+    const stripeSecretKey = this.configService.get<string>('stripe.secretKey');
+
+    // Check if Stripe should be required
+    if (
+      this.isProduction &&
+      (!stripeSecretKey || stripeSecretKey === 'sk_test_demo_key_not_required')
+    ) {
+      this.logger.error(
+        '❌ CRITICAL: Stripe configuration is required in production environment',
+      );
+      throw new Error(
+        'Stripe configuration is required in production environment',
+      );
+    }
+
+    // Skip Stripe initialization if not configured (development/demo mode)
+    if (
+      !stripeSecretKey ||
+      stripeSecretKey === 'sk_test_demo_key_not_required'
+    ) {
+      this.logger.warn('Stripe not configured - using demo mode');
+      this.stripe = null;
+      return;
+    }
+
+    // Validate Stripe key format
+    if (!this.isValidStripeKey(stripeSecretKey)) {
+      const errorMsg = `Invalid Stripe secret key format. Expected format: sk_test_* or sk_live_*`;
+      this.logger.error(`❌ ${errorMsg}`);
+
+      if (this.isProduction) {
+        throw new Error(errorMsg);
+      } else {
+        this.logger.warn(
+          'Invalid Stripe key in development - continuing in demo mode',
+        );
+        this.stripe = null;
+        return;
+      }
+    }
+
+    try {
+      this.stripe = new Stripe(stripeSecretKey, {
         apiVersion: '2025-07-30.basil',
-      },
-    );
+      });
+
+      // Test the Stripe connection by retrieving account info
+      await this.testStripeConnection();
+      this.stripeConnectionValid = true;
+      this.logger.log('✅ Stripe initialized successfully');
+    } catch (error) {
+      const errorMsg = `Failed to initialize Stripe: ${error.message}`;
+      this.logger.error(`❌ ${errorMsg}`);
+
+      if (this.isProduction) {
+        throw new Error(errorMsg);
+      } else {
+        this.logger.warn(
+          'Stripe initialization failed in development - continuing in demo mode',
+        );
+        this.stripe = null;
+      }
+    }
+  }
+
+  private isValidStripeKey(key: string): boolean {
+    // Stripe secret keys should start with sk_test_ or sk_live_
+    return /^sk_(test|live)_[a-zA-Z0-9]+$/.test(key);
+  }
+
+  private async testStripeConnection(): Promise<void> {
+    if (!this.stripe) {
+      throw new Error('Stripe not initialized');
+    }
+
+    try {
+      // Test connection by retrieving account information
+      await this.stripe.accounts.retrieve();
+    } catch (error) {
+      // Handle specific Stripe errors
+      if (error.type === 'StripeAuthenticationError') {
+        throw new Error('Invalid Stripe API key - authentication failed');
+      } else if (error.type === 'StripeAPIError') {
+        throw new Error(`Stripe API error: ${error.message}`);
+      } else if (error.type === 'StripeConnectionError') {
+        throw new Error(
+          'Unable to connect to Stripe API - check network connectivity',
+        );
+      } else {
+        throw new Error(`Stripe connection test failed: ${error.message}`);
+      }
+    }
+  }
+
+  // Add method to check Stripe health at runtime
+  public async isStripeHealthy(): Promise<boolean> {
+    if (!this.stripe || !this.stripeConnectionValid) {
+      return false;
+    }
+
+    try {
+      await this.stripe.accounts.retrieve();
+      return true;
+    } catch (error) {
+      this.logger.error('Stripe health check failed:', error.message);
+      return false;
+    }
   }
 
   async createCheckoutSession(
     createCheckoutSessionDto: CreateCheckoutSessionDto,
     userId: number,
   ) {
+    // Enhanced error handling for Stripe not configured
+    if (!this.stripe) {
+      const errorMessage = this.isProduction
+        ? 'Payment service is currently unavailable'
+        : 'Stripe not configured - demo mode active';
+      throw new BadRequestException(errorMessage);
+    }
+
+    // Check Stripe health before making API calls
+    if (!(await this.isStripeHealthy())) {
+      const errorMessage = this.isProduction
+        ? 'Payment service is temporarily unavailable'
+        : 'Stripe connection is unhealthy';
+      throw new BadRequestException(errorMessage);
+    }
+
     try {
       const { lookupKey, successUrl, cancelUrl } = createCheckoutSessionDto;
       this.logger.log(
@@ -133,7 +258,39 @@ export class BillingSubscriptionService {
       };
     } catch (error) {
       this.logger.error('Error creating checkout session:', error);
-      throw new BadRequestException('Failed to create checkout session');
+
+      // Handle different error types
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
+      // Handle Stripe-specific errors
+      if (error.type === 'StripeAuthenticationError') {
+        const message = this.isProduction
+          ? 'Payment service authentication failed'
+          : 'Invalid Stripe API key';
+        throw new BadRequestException(message);
+      }
+
+      if (error.type === 'StripeConnectionError') {
+        throw new BadRequestException('Unable to connect to payment service');
+      }
+
+      if (error.type === 'StripeInvalidRequestError') {
+        const message = this.isProduction
+          ? 'Invalid payment configuration'
+          : `Stripe request error: ${error.message}`;
+        throw new BadRequestException(message);
+      }
+
+      // Generic error
+      const message = this.isProduction
+        ? 'Failed to create payment session'
+        : 'Failed to create checkout session';
+      throw new BadRequestException(message);
     }
   }
 
@@ -141,6 +298,22 @@ export class BillingSubscriptionService {
     createPortalSessionDto: CreatePortalSessionDto,
     userId: number,
   ) {
+    // Enhanced error handling for Stripe not configured
+    if (!this.stripe) {
+      const errorMessage = this.isProduction
+        ? 'Payment service is currently unavailable'
+        : 'Stripe not configured - demo mode active';
+      throw new BadRequestException(errorMessage);
+    }
+
+    // Check Stripe health before making API calls
+    if (!(await this.isStripeHealthy())) {
+      const errorMessage = this.isProduction
+        ? 'Payment service is temporarily unavailable'
+        : 'Stripe connection is unhealthy';
+      throw new BadRequestException(errorMessage);
+    }
+
     try {
       const { returnUrl } = createPortalSessionDto;
       this.logger.log(`Creating portal session for user ${userId}`);
@@ -148,9 +321,21 @@ export class BillingSubscriptionService {
       // Get user's Stripe customer ID
       const user = await this.userRepository.findOne({ where: { userId } });
 
-      if (!user || !user.stripeCustomerId) {
-        throw new BadRequestException('No active subscription found');
+      if (!user) {
+        this.logger.error(`User not found: ${userId}`);
+        throw new BadRequestException('User not found');
       }
+
+      if (!user.stripeCustomerId) {
+        this.logger.error(`No Stripe customer ID found for user ${userId}`);
+        throw new BadRequestException(
+          'No active subscription found. Please create a subscription first.',
+        );
+      }
+
+      this.logger.log(
+        `Creating portal session for Stripe customer: ${user.stripeCustomerId}`,
+      );
 
       // Create portal session
       const portalSession = await this.stripe.billingPortal.sessions.create({
@@ -166,37 +351,153 @@ export class BillingSubscriptionService {
       };
     } catch (error) {
       this.logger.error('Error creating portal session:', error);
-      throw new BadRequestException('Failed to create portal session');
+
+      // Handle different error types
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+
+      // Handle Stripe-specific errors
+      if (error.type === 'StripeAuthenticationError') {
+        const message = this.isProduction
+          ? 'Payment service authentication failed'
+          : 'Invalid Stripe API key';
+        throw new BadRequestException(message);
+      }
+
+      if (error.type === 'StripeConnectionError') {
+        throw new BadRequestException('Unable to connect to payment service');
+      }
+
+      if (error.type === 'StripeInvalidRequestError') {
+        const message = this.isProduction
+          ? 'Unable to access customer portal'
+          : `Stripe request error: ${error.message}`;
+        throw new BadRequestException(message);
+      }
+
+      // Generic error
+      const message = this.isProduction
+        ? 'Failed to access customer portal'
+        : 'Failed to create portal session';
+      throw new BadRequestException(message);
     }
   }
 
   async getCurrentSubscription(userId: number) {
     this.logger.log(`Getting current subscription for user ${userId}`);
 
+    if (!this.stripe) {
+      return { subscription: null };
+    }
+
     const subscription = await this.subscriptionRepository.findOne({
       where: { userId },
     });
 
-    if (!subscription || !subscription.stripeSubscriptionId) {
-      return { subscription: null };
+    // If we have local subscription data, use it
+    if (subscription && subscription.stripeSubscriptionId) {
+      try {
+        // Fetch latest subscription data from Stripe
+        const stripeSubscription = await this.stripe.subscriptions.retrieve(
+          subscription.stripeSubscriptionId,
+          { expand: ['items.data.price.product'] },
+        );
+
+        const price = stripeSubscription.items.data[0]?.price;
+        const product = price?.product as Stripe.Product;
+
+        const firstItem = stripeSubscription.items.data[0];
+        console.log('🔍 Stripe subscription periods:', {
+          current_period_start: firstItem?.current_period_start,
+          current_period_end: firstItem?.current_period_end,
+          start_date: firstItem
+            ? new Date(firstItem.current_period_start * 1000)
+            : null,
+          end_date: firstItem
+            ? new Date(firstItem.current_period_end * 1000)
+            : null,
+        });
+
+        return {
+          subscription: {
+            id: stripeSubscription.id,
+            status: stripeSubscription.status,
+            plan: {
+              id: price?.lookup_key || subscription.planLookupKey,
+              name: product?.name || 'Unknown Plan',
+              price: price ? price.unit_amount / 100 : 0,
+              currency: price?.currency?.toUpperCase() || 'USD',
+              interval: price?.recurring?.interval || 'month',
+            },
+            currentPeriodStart: firstItem?.current_period_start,
+            currentPeriodEnd: firstItem?.current_period_end,
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+          },
+        };
+      } catch (error) {
+        this.logger.error('Error fetching subscription from Stripe:', error);
+        return { subscription: null };
+      }
     }
 
+    // If no local subscription data, check Stripe directly using the user's stripeCustomerId
     try {
-      // Fetch latest subscription data from Stripe
-      const stripeSubscription = await this.stripe.subscriptions.retrieve(
-        subscription.stripeSubscriptionId,
-        { expand: ['items.data.price.product'] },
+      const user = await this.userRepository.findOne({ where: { userId } });
+
+      if (!user || !user.stripeCustomerId) {
+        this.logger.log(`No Stripe customer ID found for user ${userId}`);
+        return { subscription: null };
+      }
+
+      // Get all subscriptions for this customer from Stripe
+      const subscriptions = await this.stripe.subscriptions.list({
+        customer: user.stripeCustomerId,
+        status: 'active',
+        expand: ['data.items', 'data.items.data.price'],
+      });
+
+      if (subscriptions.data.length === 0) {
+        this.logger.log(
+          `No active subscriptions found in Stripe for user ${userId}`,
+        );
+        return { subscription: null };
+      }
+
+      // Use the first active subscription
+      const stripeSubscription = subscriptions.data[0];
+      const price = stripeSubscription.items.data[0]?.price;
+      const firstItem = stripeSubscription.items.data[0];
+
+      // Fetch product details separately
+      let product: Stripe.Product = null;
+      if (price?.product) {
+        if (typeof price.product === 'string') {
+          product = await this.stripe.products.retrieve(price.product);
+        } else {
+          product = price.product as Stripe.Product;
+        }
+      }
+
+      this.logger.log(
+        `Found active subscription in Stripe: ${stripeSubscription.id}, syncing to database`,
       );
 
-      const price = stripeSubscription.items.data[0]?.price;
-      const product = price?.product as Stripe.Product;
-
-      const firstItem = stripeSubscription.items.data[0];
-      console.log('🔍 Stripe subscription periods:', {
-        current_period_start: firstItem?.current_period_start,
-        current_period_end: firstItem?.current_period_end,
-        start_date: firstItem ? new Date(firstItem.current_period_start * 1000) : null,
-        end_date: firstItem ? new Date(firstItem.current_period_end * 1000) : null,
+      // Sync this subscription to our database
+      await this.updateUserSubscription(userId, {
+        stripeSubscriptionId: stripeSubscription.id,
+        stripeCustomerId: user.stripeCustomerId,
+        planLookupKey: price?.lookup_key || stripeSubscription.id,
+        status: stripeSubscription.status,
+        currentPeriodStart: firstItem
+          ? new Date(firstItem.current_period_start * 1000)
+          : null,
+        currentPeriodEnd: firstItem
+          ? new Date(firstItem.current_period_end * 1000)
+          : null,
       });
 
       return {
@@ -204,7 +505,7 @@ export class BillingSubscriptionService {
           id: stripeSubscription.id,
           status: stripeSubscription.status,
           plan: {
-            id: price?.lookup_key || subscription.planLookupKey,
+            id: price?.lookup_key || stripeSubscription.id,
             name: product?.name || 'Unknown Plan',
             price: price ? price.unit_amount / 100 : 0,
             currency: price?.currency?.toUpperCase() || 'USD',
@@ -223,6 +524,52 @@ export class BillingSubscriptionService {
 
   async getSubscriptionPlans() {
     this.logger.log('Getting subscription plans from Stripe');
+
+    if (!this.stripe) {
+      this.logger.log('Stripe not configured - returning demo plans');
+      return {
+        plans: [
+          {
+            id: 'basic_monthly',
+            name: 'Basic',
+            description: 'Perfect for small projects',
+            price: 9.99,
+            currency: 'USD',
+            interval: 'month',
+            features: ['Up to 5 machines', 'Basic monitoring', 'Email support'],
+          },
+          {
+            id: 'professional_monthly',
+            name: 'Professional',
+            description: 'Best for growing businesses',
+            price: 29.99,
+            currency: 'USD',
+            interval: 'month',
+            features: [
+              'Up to 50 machines',
+              'Advanced monitoring',
+              'Real-time alerts',
+              'Priority support',
+            ],
+            popular: true,
+          },
+          {
+            id: 'enterprise_monthly',
+            name: 'Enterprise',
+            description: 'For large scale operations',
+            price: 99.99,
+            currency: 'USD',
+            interval: 'month',
+            features: [
+              'Unlimited machines',
+              'Custom integrations',
+              'Dedicated support',
+              'SLA guarantee',
+            ],
+          },
+        ],
+      };
+    }
 
     try {
       // Fetch all prices with lookup keys from Stripe
@@ -301,6 +648,22 @@ export class BillingSubscriptionService {
   async getPaymentMethods(userId: number) {
     this.logger.log(`Getting payment methods for user ${userId}`);
 
+    // Enhanced error handling for Stripe not configured
+    if (!this.stripe) {
+      const errorMessage = this.isProduction
+        ? 'Payment service is currently unavailable'
+        : 'Stripe not configured - demo mode active';
+      throw new BadRequestException(errorMessage);
+    }
+
+    // Check Stripe health before making API calls
+    if (!(await this.isStripeHealthy())) {
+      const errorMessage = this.isProduction
+        ? 'Payment service is temporarily unavailable'
+        : 'Stripe connection is unhealthy';
+      throw new BadRequestException(errorMessage);
+    }
+
     try {
       // Get user's Stripe customer ID
       const user = await this.userRepository.findOne({ where: { userId } });
@@ -333,10 +696,122 @@ export class BillingSubscriptionService {
       };
     } catch (error) {
       this.logger.error('Error retrieving payment methods:', error);
-      if (error instanceof NotFoundException) {
+
+      // Handle different error types
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
-      throw new BadRequestException('Failed to retrieve payment methods');
+
+      // Handle Stripe-specific errors
+      if (error.type === 'StripeAuthenticationError') {
+        const message = this.isProduction
+          ? 'Payment service authentication failed'
+          : 'Invalid Stripe API key';
+        throw new BadRequestException(message);
+      }
+
+      if (error.type === 'StripeConnectionError') {
+        throw new BadRequestException('Unable to connect to payment service');
+      }
+
+      // Generic error
+      const message = this.isProduction
+        ? 'Failed to retrieve payment information'
+        : 'Failed to retrieve payment methods';
+      throw new BadRequestException(message);
+    }
+  }
+
+  async cancelSubscription(subscriptionId: string, userId: number) {
+    this.logger.log(
+      `Canceling subscription ${subscriptionId} for user ${userId}`,
+    );
+
+    // Enhanced error handling for Stripe not configured
+    if (!this.stripe) {
+      const errorMessage = this.isProduction
+        ? 'Payment service is currently unavailable'
+        : 'Stripe not configured - demo mode active';
+      throw new BadRequestException(errorMessage);
+    }
+
+    // Check Stripe health before making API calls
+    if (!(await this.isStripeHealthy())) {
+      const errorMessage = this.isProduction
+        ? 'Payment service is temporarily unavailable'
+        : 'Stripe connection is unhealthy';
+      throw new BadRequestException(errorMessage);
+    }
+
+    try {
+      // Verify the subscription belongs to the user
+      const subscription = await this.subscriptionRepository.findOne({
+        where: { userId, stripeSubscriptionId: subscriptionId },
+      });
+
+      if (!subscription) {
+        throw new NotFoundException('Subscription not found');
+      }
+
+      // Cancel the subscription in Stripe (at period end)
+      const canceledSubscription = await this.stripe.subscriptions.update(
+        subscriptionId,
+        {
+          cancel_at_period_end: true,
+        },
+      );
+
+      const firstItem = canceledSubscription.items.data[0];
+
+      return {
+        status: 'success',
+        data: {
+          subscription: {
+            id: canceledSubscription.id,
+            status: canceledSubscription.status,
+            cancel_at_period_end: canceledSubscription.cancel_at_period_end,
+            current_period_end: firstItem?.current_period_end,
+          },
+        },
+      };
+    } catch (error) {
+      this.logger.error('Error canceling subscription:', error);
+
+      // Handle different error types
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+
+      // Handle Stripe-specific errors
+      if (error.type === 'StripeAuthenticationError') {
+        const message = this.isProduction
+          ? 'Payment service authentication failed'
+          : 'Invalid Stripe API key';
+        throw new BadRequestException(message);
+      }
+
+      if (error.type === 'StripeConnectionError') {
+        throw new BadRequestException('Unable to connect to payment service');
+      }
+
+      if (error.type === 'StripeInvalidRequestError') {
+        const message = this.isProduction
+          ? 'Unable to process subscription cancellation'
+          : `Stripe request error: ${error.message}`;
+        throw new BadRequestException(message);
+      }
+
+      // Generic error
+      const message = this.isProduction
+        ? 'Failed to process subscription cancellation'
+        : 'Failed to cancel subscription';
+      throw new BadRequestException(message);
     }
   }
 
@@ -364,6 +839,9 @@ export class BillingSubscriptionService {
     userId: number,
     email: string,
   ): Promise<Stripe.Customer> {
+    if (!this.stripe) {
+      throw new BadRequestException('Stripe not configured');
+    }
     // First, check if user already has a Stripe customer ID in database
     const user = await this.userRepository.findOne({ where: { userId } });
 
@@ -400,6 +878,11 @@ export class BillingSubscriptionService {
 
   async handleWebhookEvent(event: Stripe.Event) {
     this.logger.log(`Processing webhook event: ${event.type} - ${event.id}`);
+
+    if (!this.stripe) {
+      this.logger.warn('Stripe not configured - ignoring webhook event');
+      return;
+    }
 
     try {
       switch (event.type) {
@@ -473,14 +956,21 @@ export class BillingSubscriptionService {
 
       console.log('💾 Updating user subscription for user:', userId);
       const firstItem = subscription.items.data[0];
-      const updatedSubscription = await this.updateUserSubscription(Number(userId), {
-        stripeSubscriptionId: subscription.id,
-        stripeCustomerId: subscription.customer as string,
-        planLookupKey: lookupKey,
-        status: subscription.status,
-        currentPeriodStart: firstItem ? new Date(firstItem.current_period_start * 1000) : null,
-        currentPeriodEnd: firstItem ? new Date(firstItem.current_period_end * 1000) : null,
-      });
+      const updatedSubscription = await this.updateUserSubscription(
+        Number(userId),
+        {
+          stripeSubscriptionId: subscription.id,
+          stripeCustomerId: subscription.customer as string,
+          planLookupKey: lookupKey,
+          status: subscription.status,
+          currentPeriodStart: firstItem
+            ? new Date(firstItem.current_period_start * 1000)
+            : null,
+          currentPeriodEnd: firstItem
+            ? new Date(firstItem.current_period_end * 1000)
+            : null,
+        },
+      );
 
       console.log('✅ Subscription saved to database:', updatedSubscription);
 
@@ -505,8 +995,12 @@ export class BillingSubscriptionService {
         stripeCustomerId: subscription.customer as string,
         planLookupKey: lookupKey,
         status: subscription.status,
-        currentPeriodStart: firstItem ? new Date(firstItem.current_period_start * 1000) : null,
-        currentPeriodEnd: firstItem ? new Date(firstItem.current_period_end * 1000) : null,
+        currentPeriodStart: firstItem
+          ? new Date(firstItem.current_period_start * 1000)
+          : null,
+        currentPeriodEnd: firstItem
+          ? new Date(firstItem.current_period_end * 1000)
+          : null,
       });
     }
   }
@@ -520,8 +1014,12 @@ export class BillingSubscriptionService {
       const firstItem = subscription.items.data[0];
       await this.updateUserSubscription(Number(userId), {
         status: subscription.status,
-        currentPeriodStart: firstItem ? new Date(firstItem.current_period_start * 1000) : null,
-        currentPeriodEnd: firstItem ? new Date(firstItem.current_period_end * 1000) : null,
+        currentPeriodStart: firstItem
+          ? new Date(firstItem.current_period_start * 1000)
+          : null,
+        currentPeriodEnd: firstItem
+          ? new Date(firstItem.current_period_end * 1000)
+          : null,
       });
     }
   }
@@ -552,10 +1050,12 @@ export class BillingSubscriptionService {
         const firstItem = subscription.items.data[0];
         await this.updateUserSubscription(Number(userId), {
           status: 'active',
-          currentPeriodStart: firstItem ? new Date(
-            firstItem.current_period_start * 1000,
-          ) : null,
-          currentPeriodEnd: firstItem ? new Date(firstItem.current_period_end * 1000) : null,
+          currentPeriodStart: firstItem
+            ? new Date(firstItem.current_period_start * 1000)
+            : null,
+          currentPeriodEnd: firstItem
+            ? new Date(firstItem.current_period_end * 1000)
+            : null,
           lastPaymentDate: new Date(),
         });
       }

@@ -37,13 +37,13 @@ export class WebhookController {
     @Headers('stripe-signature') signature: string,
   ) {
     console.log('🔥 Webhook received!');
-    
+
     // Get the raw body from the request
     const rawBody = req.rawBody || req.body;
     console.log('📦 Raw body type:', typeof rawBody);
     console.log('📦 Raw body present:', !!rawBody);
     console.log('📦 Signature present:', !!signature);
-    
+
     const webhookSecret = this.configService.get<string>(
       'STRIPE_WEBHOOK_SECRET',
     );
