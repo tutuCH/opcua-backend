@@ -153,16 +153,23 @@ export class MqttProcessorService implements OnModuleInit {
       });
 
       if (!machine) {
-        this.logger.warn(`❌ Unknown machine "${deviceId}", ignoring message. Available machines should be checked.`);
+        this.logger.warn(
+          `❌ Unknown machine "${deviceId}", ignoring message. Available machines should be checked.`,
+        );
         // Log available machines for debugging
         const allMachines = await this.machineRepository.find({
           select: ['machineName', 'machineId'],
         });
-        this.logger.debug(`Available machines in database:`, allMachines.map(m => `"${m.machineName}"`));
+        this.logger.debug(
+          `Available machines in database:`,
+          allMachines.map((m) => `"${m.machineName}"`),
+        );
         return;
       }
 
-      this.logger.debug(`✅ Machine "${deviceId}" found in database (ID: ${machine.machineId})`);
+      this.logger.debug(
+        `✅ Machine "${deviceId}" found in database (ID: ${machine.machineId})`,
+      );
 
       // Enqueue message for processing
       await this.redisService.enqueueMQTTMessage(topic, message);
@@ -236,12 +243,16 @@ export class MqttProcessorService implements OnModuleInit {
         return;
       }
 
-      this.logger.debug(`📊 Processing realtime data for device ${data.devId}:`, {
-        oilTemp: data.Data.OT,
-        status: data.Data.STS,
-        operateMode: data.Data.OPM,
-        tempCount: Object.keys(data.Data).filter(k => k.startsWith('T')).length,
-      });
+      this.logger.debug(
+        `📊 Processing realtime data for device ${data.devId}:`,
+        {
+          oilTemp: data.Data.OT,
+          status: data.Data.STS,
+          operateMode: data.Data.OPM,
+          tempCount: Object.keys(data.Data).filter((k) => k.startsWith('T'))
+            .length,
+        },
+      );
 
       // Store in InfluxDB
       this.logger.debug(`💾 Writing to InfluxDB for device ${data.devId}`);
@@ -254,9 +265,10 @@ export class MqttProcessorService implements OnModuleInit {
         lastUpdated: new Date().toISOString(),
       });
 
-      // Broadcast to WebSocket clients
-      this.logger.log(`📡 Broadcasting realtime update for device ${data.devId} to WebSocket clients`);
-      this.machineGateway.broadcastRealtimeUpdate(data.devId, data);
+      // WebSocket broadcasting will be handled by Redis pub/sub in MachineGateway
+      this.logger.log(
+        `📡 Realtime update for device ${data.devId} will be broadcasted via Redis pub/sub`,
+      );
 
       // Publish to Redis for other services
       await this.redisService.publish('mqtt:realtime:processed', {
@@ -267,7 +279,9 @@ export class MqttProcessorService implements OnModuleInit {
       // Check for alerts
       await this.checkForAlerts(data);
 
-      this.logger.log(`✅ Successfully processed realtime message for device ${data.devId}`);
+      this.logger.log(
+        `✅ Successfully processed realtime message for device ${data.devId}`,
+      );
     } catch (error) {
       this.logger.error(`💥 Failed to process realtime message:`, error);
       // Re-queue the message for retry (implement retry logic if needed)
@@ -303,12 +317,15 @@ export class MqttProcessorService implements OnModuleInit {
       });
 
       // Store in InfluxDB
-      this.logger.debug(`💾 Writing SPC data to InfluxDB for device ${data.devId}`);
+      this.logger.debug(
+        `💾 Writing SPC data to InfluxDB for device ${data.devId}`,
+      );
       await this.influxDbService.writeSPCData(data);
 
-      // Broadcast to WebSocket clients
-      this.logger.log(`📡 Broadcasting SPC update for device ${data.devId} to WebSocket clients`);
-      this.machineGateway.broadcastSPCUpdate(data.devId, data);
+      // WebSocket broadcasting will be handled by Redis pub/sub in MachineGateway
+      this.logger.log(
+        `📡 SPC update for device ${data.devId} will be broadcasted via Redis pub/sub`,
+      );
 
       // Publish to Redis for other services
       await this.redisService.publish('mqtt:spc:processed', {
@@ -340,11 +357,7 @@ export class MqttProcessorService implements OnModuleInit {
         3600, // Cache for 1 hour
       );
 
-      // Broadcast to WebSocket clients
-      this.machineGateway.broadcastRealtimeUpdate(data.devId, {
-        type: 'tech_config',
-        data: data.Data,
-      });
+      // Tech config will be available via Redis cache and can be requested via WebSocket
 
       this.logger.debug(
         `Processed tech configuration for device ${data.devId}`,
@@ -398,9 +411,8 @@ export class MqttProcessorService implements OnModuleInit {
         });
       }
 
-      // Broadcast alerts
+      // Publish alerts to Redis for processing via MachineGateway
       for (const alert of alerts) {
-        this.machineGateway.broadcastMachineAlert(data.devId, alert);
         await this.redisService.publish('machine:alerts', {
           deviceId: data.devId,
           alert,

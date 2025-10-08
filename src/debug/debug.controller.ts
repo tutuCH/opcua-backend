@@ -28,8 +28,8 @@ export class DebugController {
           this.redisService.getQueueLength('mqtt:tech'),
         ]),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 5000)
-        )
+          setTimeout(() => reject(new Error('Timeout')), 5000),
+        ),
       ]);
 
       const [realtime, spc, tech] = result;
@@ -218,13 +218,15 @@ export class DebugController {
         success: true,
         timestamp: new Date().toISOString(),
         machineCount: machines.length,
-        machines: machines.map(m => ({
+        machines: machines.map((m) => ({
           id: m.machineId,
           name: `"${m.machineName}"`, // Quoted to see exact spacing
           ip: m.machineIpAddress,
           status: m.status,
         })),
-        targetMachineExists: machines.some(m => m.machineName === 'postgres machine 1'),
+        targetMachineExists: machines.some(
+          (m) => m.machineName === 'postgres machine 1',
+        ),
       };
     } catch (error) {
       return {
@@ -240,10 +242,12 @@ export class DebugController {
     const results: {
       timestamp: string;
       services: {
-        mqttProcessor?: {
-          connected: boolean;
-          stats: any;
-        } | { error: string };
+        mqttProcessor?:
+          | {
+              connected: boolean;
+              stats: any;
+            }
+          | { error: string };
       };
       machines: {
         count?: number;
@@ -280,7 +284,7 @@ export class DebugController {
         });
         results.machines = {
           count: machines.length,
-          machines: machines.map(m => ({
+          machines: machines.map((m) => ({
             id: m.machineId,
             name: m.machineName,
             ip: m.machineIpAddress,
@@ -298,8 +302,8 @@ export class DebugController {
           stats: await Promise.race([
             this.mqttProcessor.getProcessingStats(),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('Timeout')), 3000)
-            )
+              setTimeout(() => reject(new Error('Timeout')), 3000),
+            ),
           ]),
         };
       } catch (error: any) {
@@ -316,8 +320,8 @@ export class DebugController {
             this.redisService.getQueueLength('mqtt:tech'),
           ]),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), 3000)
-          )
+            setTimeout(() => reject(new Error('Timeout')), 3000),
+          ),
         ]);
 
         const [realtime, spc, tech] = queueResult;
@@ -333,10 +337,13 @@ export class DebugController {
 
       // Check for specific machine status
       if (results.machines.machines?.length > 0) {
-        const targetMachine = results.machines.machines.find(m => m.name === 'postgres machine 1');
+        const targetMachine = results.machines.machines.find(
+          (m) => m.name === 'postgres machine 1',
+        );
         if (targetMachine) {
           try {
-            const machineStatus = await this.redisService.getMachineStatus('postgres machine 1');
+            const machineStatus =
+              await this.redisService.getMachineStatus('postgres machine 1');
             results.machines.targetMachineCache = {
               exists: !!machineStatus,
               lastUpdate: machineStatus?.lastUpdated || null,
@@ -345,7 +352,9 @@ export class DebugController {
             results.errors.push(`Machine cache error: ${error.message}`);
           }
         } else {
-          results.errors.push(`Target machine "postgres machine 1" not found in database`);
+          results.errors.push(
+            `Target machine "postgres machine 1" not found in database`,
+          );
         }
       }
 

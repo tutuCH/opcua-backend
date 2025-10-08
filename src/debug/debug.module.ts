@@ -11,7 +11,7 @@ import { Machine } from '../machines/entities/machine.entity';
     TypeOrmModule.forFeature([Machine]),
     RedisModule,
     InfluxDBModule,
-    MqttProcessorModule
+    MqttProcessorModule,
   ],
   controllers: [DebugController],
 })

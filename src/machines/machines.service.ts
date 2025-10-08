@@ -14,6 +14,9 @@ import { UpdateMachineIndexDto } from './dto/update-machine-index.dto';
 import { Machine } from './entities/machine.entity';
 import { User } from '../user/entities/user.entity';
 import { Factory } from '../factories/entities/factory.entity';
+import { InfluxDBService } from '../influxdb/influxdb.service';
+import { RedisService } from '../redis/redis.service';
+import { Response } from 'express';
 @Injectable()
 export class MachinesService {
   private readonly logger = new Logger(MachinesService.name);
@@ -24,6 +27,8 @@ export class MachinesService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Factory)
     private readonly factoryRepository: Repository<Factory>,
+    private readonly influxDbService: InfluxDBService,
+    private readonly redisService: RedisService,
   ) {}
 
   async create(
@@ -336,5 +341,226 @@ export class MachinesService {
       `findFactoriesAndMachinesByUserId: ${JSON.stringify(result)}`,
     );
     return result;
+  }
+
+  // Historical Data Methods
+
+  async getRealtimeHistory(
+    machineName: string,
+    options: {
+      timeRange: string;
+      limit: number;
+      offset: number;
+      aggregate: string;
+    },
+  ) {
+    try {
+      const { timeRange, limit, offset, aggregate } = options;
+
+      let data: any[];
+
+      if (aggregate === 'none') {
+        // Get paginated raw data
+        data = await this.influxDbService.queryRealtimeDataPaginated(
+          machineName,
+          timeRange,
+          limit,
+          offset,
+        );
+      } else {
+        // Get aggregated data
+        data = await this.influxDbService.queryRealtimeDataAggregated(
+          machineName,
+          timeRange,
+          aggregate,
+        );
+      }
+
+      // Get total count for pagination metadata
+      const totalCount = await this.influxDbService.getRealtimeDataCount(
+        machineName,
+        timeRange,
+      );
+
+      const hasNext = offset + limit < totalCount;
+      const hasPrevious = offset > 0;
+
+      return {
+        deviceId: machineName,
+        timeRange,
+        data,
+        pagination: {
+          limit,
+          offset,
+          totalCount,
+          hasNext,
+          hasPrevious,
+          nextOffset: hasNext ? offset + limit : null,
+          previousOffset: hasPrevious ? Math.max(0, offset - limit) : null,
+        },
+        dataPoints: data.length,
+        aggregate,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to get realtime history for ${machineName}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async getSPCHistory(
+    machineName: string,
+    options: {
+      timeRange: string;
+      limit: number;
+      offset: number;
+      aggregate: string;
+    },
+  ) {
+    try {
+      const { timeRange, limit, offset, aggregate } = options;
+
+      let data: any[];
+
+      if (aggregate === 'none') {
+        // Get paginated raw data
+        data = await this.influxDbService.querySPCDataPaginated(
+          machineName,
+          timeRange,
+          limit,
+          offset,
+        );
+      } else {
+        // Get aggregated data
+        data = await this.influxDbService.querySPCDataAggregated(
+          machineName,
+          timeRange,
+          aggregate,
+        );
+      }
+
+      // Get total count for pagination metadata
+      const totalCount = await this.influxDbService.getSPCDataCount(
+        machineName,
+        timeRange,
+      );
+
+      const hasNext = offset + limit < totalCount;
+      const hasPrevious = offset > 0;
+
+      return {
+        deviceId: machineName,
+        timeRange,
+        data,
+        pagination: {
+          limit,
+          offset,
+          totalCount,
+          hasNext,
+          hasPrevious,
+          nextOffset: hasNext ? offset + limit : null,
+          previousOffset: hasPrevious ? Math.max(0, offset - limit) : null,
+        },
+        cycles: data.length,
+        aggregate,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get SPC history for ${machineName}:`, error);
+      throw error;
+    }
+  }
+
+  async getMachineStatus(machineName: string) {
+    try {
+      // Get current status from Redis cache
+      const cachedStatus = await this.redisService.getMachineStatus(machineName);
+
+      if (cachedStatus) {
+        return {
+          deviceId: machineName,
+          data: cachedStatus,
+          source: 'cache',
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      // If no cached status, get latest from InfluxDB
+      const latestData = await this.influxDbService.queryRealtimeData(
+        machineName,
+        '-5m',
+      );
+
+      const latestPoint = latestData.length > 0 ? latestData[latestData.length - 1] : null;
+
+      return {
+        deviceId: machineName,
+        data: latestPoint,
+        source: 'influxdb',
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get machine status for ${machineName}:`, error);
+      throw error;
+    }
+  }
+
+  async streamHistoryData(
+    machineName: string,
+    options: {
+      timeRange: string;
+      dataType: string;
+    },
+    res: Response,
+  ) {
+    try {
+      const { timeRange, dataType } = options;
+
+      res.write('{"status":"streaming","deviceId":"' + machineName + '","data":[');
+
+      let isFirstChunk = true;
+
+      if (dataType === 'realtime' || dataType === 'both') {
+        // Stream realtime data in chunks
+        await this.influxDbService.streamRealtimeData(
+          machineName,
+          timeRange,
+          (chunk: any[]) => {
+            if (!isFirstChunk) {
+              res.write(',');
+            }
+            res.write(JSON.stringify({ type: 'realtime', data: chunk }));
+            isFirstChunk = false;
+          },
+        );
+      }
+
+      if (dataType === 'spc' || dataType === 'both') {
+        // Stream SPC data in chunks
+        await this.influxDbService.streamSPCData(
+          machineName,
+          timeRange,
+          (chunk: any[]) => {
+            if (!isFirstChunk) {
+              res.write(',');
+            }
+            res.write(JSON.stringify({ type: 'spc', data: chunk }));
+            isFirstChunk = false;
+          },
+        );
+      }
+
+      res.write(']}');
+      res.end();
+    } catch (error) {
+      this.logger.error(
+        `Failed to stream history data for ${machineName}:`,
+        error,
+      );
+      res.status(500).json({ error: 'Failed to stream data' });
+    }
   }
 }

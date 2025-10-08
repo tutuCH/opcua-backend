@@ -2,6 +2,14 @@
 
 This document provides comprehensive guidance for frontend developers integrating with the OPC UA Dashboard WebSocket API.
 
+## 🚀 Recent Updates (v2.0)
+
+**Major Architecture Change - Hybrid Communication Pattern:**
+- **WebSocket**: Now optimized for real-time streaming only (realtime-update, spc-update, machine-alert)
+- **REST API**: New endpoints for historical data with pagination and streaming
+- **Performance**: Eliminated large data transfers over WebSocket (no more 1000+ data points blocking connections)
+- **Bulk Data**: Use new REST endpoints for historical data instead of WebSocket
+
 ## Connection Details
 
 ### WebSocket Endpoint
@@ -73,14 +81,43 @@ const statusRequest = {
 socket.emit('get-machine-status', statusRequest);
 ```
 
-#### Request Machine Historical Data
+#### ⚠️ Historical Data (DEPRECATED - Use REST API Instead)
 ```javascript
+// DEPRECATED: This method sends large amounts of data over WebSocket
+// Use the new REST API endpoints instead for better performance
+
 const historyRequest = {
   deviceId: "MACHINE_001",
   timeRange: "-1h" // Optional: defaults to "-1h", supports InfluxDB time syntax
 };
 
 socket.emit('get-machine-history', historyRequest);
+```
+
+**🔄 NEW: Use REST API for Historical Data**
+```javascript
+// Recommended approach for historical data
+const token = 'your-jwt-token';
+
+// Paginated realtime history
+const realtimeHistory = await fetch(`/api/machines/1/realtime-history?timeRange=-1h&limit=100&offset=0`, {
+  headers: { 'Authorization': `Bearer ${token}` }
+}).then(res => res.json());
+
+// Paginated SPC history
+const spcHistory = await fetch(`/api/machines/1/spc-history?timeRange=-1h&limit=50`, {
+  headers: { 'Authorization': `Bearer ${token}` }
+}).then(res => res.json());
+
+// Current machine status
+const machineStatus = await fetch(`/api/machines/1/status`, {
+  headers: { 'Authorization': `Bearer ${token}` }
+}).then(res => res.json());
+
+// Streaming large datasets
+const streamingData = await fetch(`/api/machines/1/history/stream?timeRange=-4h&dataType=realtime`, {
+  headers: { 'Authorization': `Bearer ${token}` }
+}).then(res => res.json());
 ```
 
 #### Health Check
@@ -199,8 +236,10 @@ socket.on('spc-update', (data) => {
 
 ### 3. Historical Data
 
-#### Machine History Response
+#### ⚠️ Machine History Response (DEPRECATED)
 ```javascript
+// DEPRECATED: This event can send large amounts of data over WebSocket
+// Use REST API endpoints instead for better performance
 socket.on('machine-history', (data) => {
   console.log('Machine History:', data);
   /*
@@ -218,6 +257,50 @@ socket.on('machine-history', (data) => {
   }
   */
 });
+```
+
+#### 🔄 NEW: REST API Response Formats
+```javascript
+// Paginated realtime history response
+{
+  "data": [
+    {
+      "_time": "2025-01-15T10:30:00Z",
+      "device_id": "MACHINE_001",
+      "oil_temp": 52.3,
+      "operate_mode": 2,
+      "status": 2,
+      "temp_1": 221.5,
+      // ... additional fields
+    }
+  ],
+  "pagination": {
+    "total": 156,
+    "limit": 100,
+    "offset": 0
+  },
+  "metadata": {
+    "deviceId": "MACHINE_001",
+    "timeRange": "-1h",
+    "aggregate": "none"
+  }
+}
+
+// Machine status response
+{
+  "deviceId": "MACHINE_001",
+  "status": {
+    "devId": "MACHINE_001",
+    "Data": {
+      "OT": 52.3,
+      "STS": 2,
+      "OPM": 2,
+      // ... additional status fields
+    },
+    "lastUpdated": "2025-01-15T10:30:00Z"
+  },
+  "lastUpdated": "2025-01-15T10:30:00Z"
+}
 ```
 
 ### 4. Alerts and Notifications
@@ -256,7 +339,26 @@ socket.on('error', (error) => {
 });
 ```
 
-## Complete Frontend Integration Example
+## NEW REST API Endpoints
+
+### Available Endpoints
+
+| Endpoint | Method | Description | Query Parameters |
+|----------|--------|-------------|------------------|
+| `/machines/:id/realtime-history` | GET | Paginated realtime data | `timeRange`, `limit`, `offset`, `aggregate` |
+| `/machines/:id/spc-history` | GET | Paginated SPC data | `timeRange`, `limit`, `offset`, `aggregate` |
+| `/machines/:id/status` | GET | Current machine status | None |
+| `/machines/:id/history/stream` | GET | Streaming large datasets | `timeRange`, `dataType` |
+
+### Query Parameters
+
+- **timeRange**: InfluxDB time syntax (e.g., `-1h`, `-30m`, `-1d`)
+- **limit**: Number of records per page (default: 1000)
+- **offset**: Starting record offset (default: 0)
+- **aggregate**: Data aggregation level (`none`, `1m`, `5m`, `1h`)
+- **dataType**: Type of data (`realtime`, `spc`, `both`)
+
+## Complete Frontend Integration Example (Updated v2.0)
 
 ```javascript
 import { io } from 'socket.io-client';
@@ -265,6 +367,7 @@ class MachineDataService {
   constructor() {
     this.socket = null;
     this.subscribedMachines = new Set();
+    this.authToken = null; // JWT token for REST API calls
   }
 
   connect() {
@@ -327,8 +430,70 @@ class MachineDataService {
     this.socket.emit('get-machine-status', { deviceId });
   }
 
+  // DEPRECATED: Use REST API methods instead
   requestMachineHistory(deviceId, timeRange = '-1h') {
+    console.warn('DEPRECATED: Use getRealtimeHistory() or getSPCHistory() REST methods instead');
     this.socket.emit('get-machine-history', { deviceId, timeRange });
+  }
+
+  // NEW: REST API methods for historical data
+  setAuthToken(token) {
+    this.authToken = token;
+  }
+
+  async getRealtimeHistory(machineId, options = {}) {
+    const params = new URLSearchParams({
+      timeRange: options.timeRange || '-1h',
+      limit: options.limit || '100',
+      offset: options.offset || '0',
+      aggregate: options.aggregate || 'none'
+    });
+
+    const response = await fetch(`/machines/${machineId}/realtime-history?${params}`, {
+      headers: { 'Authorization': `Bearer ${this.authToken}` }
+    });
+
+    if (!response.ok) throw new Error(`Failed to fetch realtime history: ${response.statusText}`);
+    return await response.json();
+  }
+
+  async getSPCHistory(machineId, options = {}) {
+    const params = new URLSearchParams({
+      timeRange: options.timeRange || '-1h',
+      limit: options.limit || '50',
+      offset: options.offset || '0',
+      aggregate: options.aggregate || 'none'
+    });
+
+    const response = await fetch(`/machines/${machineId}/spc-history?${params}`, {
+      headers: { 'Authorization': `Bearer ${this.authToken}` }
+    });
+
+    if (!response.ok) throw new Error(`Failed to fetch SPC history: ${response.statusText}`);
+    return await response.json();
+  }
+
+  async getMachineStatusREST(machineId) {
+    const response = await fetch(`/machines/${machineId}/status`, {
+      headers: { 'Authorization': `Bearer ${this.authToken}` }
+    });
+
+    if (!response.ok) throw new Error(`Failed to fetch machine status: ${response.statusText}`);
+    return await response.json();
+  }
+
+  async streamHistoryData(machineId, options = {}) {
+    const params = new URLSearchParams({
+      timeRange: options.timeRange || '-4h',
+      dataType: options.dataType || 'both'
+    });
+
+    const response = await fetch(`/machines/${machineId}/history/stream?${params}`, {
+      headers: { 'Authorization': `Bearer ${this.authToken}` }
+    });
+
+    if (!response.ok) throw new Error(`Failed to stream history data: ${response.statusText}`);
+    return await response.json();
   }
 
   // Event handlers
@@ -365,28 +530,67 @@ class MachineDataService {
   }
 }
 
-// Usage
+// Usage (Updated v2.0)
 const machineService = new MachineDataService();
 machineService.connect();
+machineService.setAuthToken('your-jwt-token');
 
-// Subscribe to machines
+// Subscribe to machines for real-time updates
 machineService.subscribeToMachine('MACHINE_001');
 machineService.subscribeToMachine('MACHINE_002');
 
-// Request data
+// Request real-time status via WebSocket (for immediate status)
 machineService.requestMachineStatus('MACHINE_001');
-machineService.requestMachineHistory('MACHINE_001', '-2h');
+
+// NEW: Get historical data via REST API (recommended for bulk data)
+try {
+  // Get paginated realtime history
+  const realtimeHistory = await machineService.getRealtimeHistory('1', {
+    timeRange: '-2h',
+    limit: '50',
+    offset: '0'
+  });
+
+  // Get SPC data
+  const spcHistory = await machineService.getSPCHistory('1', {
+    timeRange: '-1h',
+    limit: '20'
+  });
+
+  // Get current status via REST (alternative to WebSocket)
+  const currentStatus = await machineService.getMachineStatusREST('1');
+
+  // Stream large datasets efficiently
+  const streamData = await machineService.streamHistoryData('1', {
+    timeRange: '-24h',
+    dataType: 'realtime'
+  });
+
+} catch (error) {
+  console.error('Failed to fetch data:', error);
+}
 ```
 
-## Data Flow Architecture
+## Data Flow Architecture (Updated v2.0)
 
 ```
 MQTT Broker → NestJS Backend → Redis Queue → Processing → InfluxDB Storage
-                    ↓
-            WebSocket Gateway ← Redis Pub/Sub ← Message Processor
-                    ↓
-              Frontend Client
+                    ↓                              ↓
+            WebSocket Gateway ← Redis Pub/Sub     REST API Controllers
+            (Real-time only)                      (Historical data)
+                    ↓                              ↓
+              Frontend Client ←------------------→ Frontend Client
+              (Live updates)                      (Bulk data)
 ```
+
+### Communication Pattern
+
+| Data Type | Channel | Use Case | Performance |
+|-----------|---------|----------|-------------|
+| **Real-time updates** | WebSocket | Live machine data, SPC events, alerts | ⚡ Instant streaming |
+| **Historical data** | REST API | Charts, reports, analysis | 📊 Paginated & compressed |
+| **Machine status** | Both | Current status (WebSocket for immediate, REST for on-demand) | 🔄 Flexible |
+| **Bulk datasets** | REST API | Data export, large time ranges | 🗜️ Streaming & compressed |
 
 ## Best Practices
 
@@ -395,20 +599,28 @@ MQTT Broker → NestJS Backend → Redis Queue → Processing → InfluxDB Stora
 - Handle connection state in your application
 - Clean up subscriptions on component unmount
 
-### 2. Data Handling
-- Buffer real-time data to prevent UI blocking
-- Implement data validation for incoming messages
-- Use appropriate chart libraries for time-series data
+### 2. Data Handling (Updated v2.0)
+- **WebSocket**: Buffer real-time data to prevent UI blocking
+- **REST API**: Use pagination for large datasets instead of loading all at once
+- **Validation**: Implement data validation for incoming messages
+- **Charts**: Use appropriate chart libraries for time-series data
+- **Caching**: Cache REST API responses to reduce server load
 
-### 3. Performance
-- Limit simultaneous machine subscriptions
-- Implement data throttling for high-frequency updates
-- Use virtualization for large datasets
+### 3. Performance (Updated v2.0)
+- **WebSocket**: Limit simultaneous machine subscriptions (recommended: 5-10 machines)
+- **Real-time**: Implement data throttling for high-frequency updates
+- **Historical**: Use REST API pagination instead of large WebSocket transfers
+- **UI**: Use virtualization for large datasets in charts/tables
+- **Compression**: REST API responses are automatically compressed (gzip)
+- **Streaming**: Use streaming endpoints for datasets >1000 records
 
-### 4. Error Handling
-- Always listen for 'error' events
-- Implement fallback mechanisms for connectivity issues
-- Log errors for debugging purposes
+### 4. Error Handling (Updated v2.0)
+- **WebSocket**: Always listen for 'error' events
+- **REST API**: Implement proper HTTP error handling (401, 403, 404, 500)
+- **Fallback**: WebSocket disconnection → Switch to REST API polling temporarily
+- **Retry**: Implement exponential backoff for failed REST requests
+- **Logging**: Log errors for debugging purposes
+- **User Experience**: Show loading states and error messages appropriately
 
 ## Environment Configuration
 
@@ -422,21 +634,99 @@ const socket = io('ws://localhost:3000');
 const socket = io('wss://your-production-domain.com');
 ```
 
-## Security Considerations
+## Migration Guide (v1.0 → v2.0)
 
-- The current implementation allows all CORS origins (`*`)
-- Authentication may be required in production
-- Consider rate limiting for WebSocket connections
-- Validate all incoming data on the frontend
+### Breaking Changes
+1. **WebSocket no longer sends bulk historical data automatically**
+2. **`get-machine-history` WebSocket event is deprecated**
+3. **REST API authentication required via JWT tokens**
+
+### Migration Steps
+
+#### 1. Replace WebSocket Historical Data Calls
+```javascript
+// OLD (v1.0) - DEPRECATED
+socket.emit('get-machine-history', { deviceId: 'MACHINE_001', timeRange: '-2h' });
+socket.on('machine-history', (data) => {
+  // Handle large data over WebSocket
+});
+
+// NEW (v2.0) - RECOMMENDED
+const token = await getAuthToken();
+const response = await fetch('/machines/1/realtime-history?timeRange=-2h&limit=100', {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+const data = await response.json();
+```
+
+#### 2. Add JWT Authentication
+```javascript
+// Login and get token
+const loginResponse = await fetch('/auth/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email: 'user@example.com', password: 'password' })
+});
+const { access_token } = await loginResponse.json();
+
+// Use token for REST API calls
+machineService.setAuthToken(access_token);
+```
+
+#### 3. Update Data Loading Logic
+```javascript
+// OLD: Everything via WebSocket
+class Dashboard {
+  loadMachineData(deviceId) {
+    socket.emit('subscribe-machine', { deviceId });
+    socket.emit('get-machine-history', { deviceId, timeRange: '-1h' });
+  }
+}
+
+// NEW: Hybrid approach
+class Dashboard {
+  async loadMachineData(deviceId) {
+    // Real-time updates via WebSocket
+    socket.emit('subscribe-machine', { deviceId });
+
+    // Historical data via REST API
+    const history = await machineService.getRealtimeHistory(deviceId, {
+      timeRange: '-1h',
+      limit: 100
+    });
+
+    this.renderChart(history.data);
+  }
+}
+```
+
+## Security Considerations (Updated v2.0)
+
+- **CORS**: The current implementation allows all CORS origins (`*`)
+- **Authentication**: JWT tokens required for REST API endpoints
+- **WebSocket**: No authentication required (configure in production)
+- **Rate Limiting**: Consider implementing for both WebSocket and REST API
+- **Data Validation**: Validate all incoming data on the frontend
+- **Token Storage**: Securely store JWT tokens (localStorage/sessionStorage considerations)
 
 ## Troubleshooting
 
-### Common Issues
+### Common Issues (Updated v2.0)
 
-1. **Connection Failed**: Check if backend server is running on port 3000
-2. **No Data Received**: Ensure proper machine subscription
-3. **High CPU Usage**: Implement data throttling and buffering
-4. **Memory Leaks**: Clean up event listeners and subscriptions
+1. **WebSocket Connection Failed**: Check if backend server is running on port 3000
+2. **No Real-time Data**: Ensure proper machine subscription via `subscribe-machine`
+3. **Historical Data 401/403**: Check JWT token validity and authentication
+4. **Large Data Loading Slowly**: Use REST API pagination instead of loading all at once
+5. **High CPU Usage**: Implement data throttling for WebSocket real-time updates
+6. **Memory Leaks**: Clean up event listeners and subscriptions
+7. **REST API CORS Issues**: Ensure frontend origin is in CORS whitelist
+
+### New v2.0 Specific Issues
+
+1. **"machine-history not received"**: Use new REST API endpoints instead
+2. **"Too much data over WebSocket"**: Switch to REST API for historical data
+3. **Authentication errors**: Ensure JWT token is included in REST requests
+4. **Slow historical data**: Use streaming endpoint for large datasets
 
 ### Debug Mode
 ```javascript

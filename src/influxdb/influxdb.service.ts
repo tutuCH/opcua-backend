@@ -199,6 +199,370 @@ export class InfluxDBService implements OnModuleInit {
     }
   }
 
+  // Paginated Data Methods
+
+  async queryRealtimeDataPaginated(
+    deviceId: string,
+    timeRange: string = '-1h',
+    limit: number = 1000,
+    offset: number = 0,
+  ): Promise<any[]> {
+    try {
+      const query = `
+        from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+          |> range(start: ${timeRange})
+          |> filter(fn: (r) => r["_measurement"] == "realtime")
+          |> filter(fn: (r) => r["device_id"] == "${deviceId}")
+          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+          |> sort(columns: ["_time"], desc: true)
+          |> limit(n: ${limit}, offset: ${offset})
+      `;
+
+      const result = [];
+      return new Promise((resolve, reject) => {
+        this.queryApi.queryRows(query, {
+          next: (row, tableMeta) => {
+            const record = tableMeta.toObject(row);
+            result.push(record);
+          },
+          error: (error) => {
+            this.logger.error(`Paginated query failed for device ${deviceId}`, error);
+            reject(error);
+          },
+          complete: () => {
+            this.logger.debug(
+              `Paginated query completed for device ${deviceId}, ${result.length} records (limit: ${limit}, offset: ${offset})`,
+            );
+            resolve(result);
+          },
+        });
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to query paginated realtime data for device ${deviceId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async querySPCDataPaginated(
+    deviceId: string,
+    timeRange: string = '-1h',
+    limit: number = 1000,
+    offset: number = 0,
+  ): Promise<any[]> {
+    try {
+      const query = `
+        from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+          |> range(start: ${timeRange})
+          |> filter(fn: (r) => r["_measurement"] == "spc")
+          |> filter(fn: (r) => r["device_id"] == "${deviceId}")
+          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+          |> sort(columns: ["_time"], desc: true)
+          |> limit(n: ${limit}, offset: ${offset})
+      `;
+
+      const result = [];
+      return new Promise((resolve, reject) => {
+        this.queryApi.queryRows(query, {
+          next: (row, tableMeta) => {
+            const record = tableMeta.toObject(row);
+            result.push(record);
+          },
+          error: (error) => {
+            this.logger.error(`Paginated SPC query failed for device ${deviceId}`, error);
+            reject(error);
+          },
+          complete: () => {
+            this.logger.debug(
+              `Paginated SPC query completed for device ${deviceId}, ${result.length} records (limit: ${limit}, offset: ${offset})`,
+            );
+            resolve(result);
+          },
+        });
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to query paginated SPC data for device ${deviceId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  // Aggregated Data Methods
+
+  async queryRealtimeDataAggregated(
+    deviceId: string,
+    timeRange: string = '-1h',
+    aggregation: string = '1m',
+  ): Promise<any[]> {
+    try {
+      const query = `
+        from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+          |> range(start: ${timeRange})
+          |> filter(fn: (r) => r["_measurement"] == "realtime")
+          |> filter(fn: (r) => r["device_id"] == "${deviceId}")
+          |> aggregateWindow(every: ${aggregation}, fn: mean, createEmpty: false)
+          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+          |> sort(columns: ["_time"], desc: true)
+      `;
+
+      const result = [];
+      return new Promise((resolve, reject) => {
+        this.queryApi.queryRows(query, {
+          next: (row, tableMeta) => {
+            const record = tableMeta.toObject(row);
+            result.push(record);
+          },
+          error: (error) => {
+            this.logger.error(`Aggregated query failed for device ${deviceId}`, error);
+            reject(error);
+          },
+          complete: () => {
+            this.logger.debug(
+              `Aggregated query completed for device ${deviceId}, ${result.length} records (aggregation: ${aggregation})`,
+            );
+            resolve(result);
+          },
+        });
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to query aggregated realtime data for device ${deviceId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async querySPCDataAggregated(
+    deviceId: string,
+    timeRange: string = '-1h',
+    aggregation: string = '1m',
+  ): Promise<any[]> {
+    try {
+      const query = `
+        from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+          |> range(start: ${timeRange})
+          |> filter(fn: (r) => r["_measurement"] == "spc")
+          |> filter(fn: (r) => r["device_id"] == "${deviceId}")
+          |> aggregateWindow(every: ${aggregation}, fn: mean, createEmpty: false)
+          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+          |> sort(columns: ["_time"], desc: true)
+      `;
+
+      const result = [];
+      return new Promise((resolve, reject) => {
+        this.queryApi.queryRows(query, {
+          next: (row, tableMeta) => {
+            const record = tableMeta.toObject(row);
+            result.push(record);
+          },
+          error: (error) => {
+            this.logger.error(`Aggregated SPC query failed for device ${deviceId}`, error);
+            reject(error);
+          },
+          complete: () => {
+            this.logger.debug(
+              `Aggregated SPC query completed for device ${deviceId}, ${result.length} records (aggregation: ${aggregation})`,
+            );
+            resolve(result);
+          },
+        });
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to query aggregated SPC data for device ${deviceId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  // Count Methods for Pagination
+
+  async getRealtimeDataCount(
+    deviceId: string,
+    timeRange: string = '-1h',
+  ): Promise<number> {
+    try {
+      const query = `
+        from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+          |> range(start: ${timeRange})
+          |> filter(fn: (r) => r["_measurement"] == "realtime")
+          |> filter(fn: (r) => r["device_id"] == "${deviceId}")
+          |> count()
+          |> yield(name: "count")
+      `;
+
+      return new Promise((resolve, reject) => {
+        let count = 0;
+        this.queryApi.queryRows(query, {
+          next: (row, tableMeta) => {
+            const record = tableMeta.toObject(row);
+            count = record._value || 0;
+          },
+          error: (error) => {
+            this.logger.error(`Count query failed for device ${deviceId}`, error);
+            reject(error);
+          },
+          complete: () => {
+            resolve(count);
+          },
+        });
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to get realtime data count for device ${deviceId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async getSPCDataCount(
+    deviceId: string,
+    timeRange: string = '-1h',
+  ): Promise<number> {
+    try {
+      const query = `
+        from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+          |> range(start: ${timeRange})
+          |> filter(fn: (r) => r["_measurement"] == "spc")
+          |> filter(fn: (r) => r["device_id"] == "${deviceId}")
+          |> count()
+          |> yield(name: "count")
+      `;
+
+      return new Promise((resolve, reject) => {
+        let count = 0;
+        this.queryApi.queryRows(query, {
+          next: (row, tableMeta) => {
+            const record = tableMeta.toObject(row);
+            count = record._value || 0;
+          },
+          error: (error) => {
+            this.logger.error(`SPC count query failed for device ${deviceId}`, error);
+            reject(error);
+          },
+          complete: () => {
+            resolve(count);
+          },
+        });
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to get SPC data count for device ${deviceId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  // Streaming Methods
+
+  async streamRealtimeData(
+    deviceId: string,
+    timeRange: string = '-1h',
+    onChunk: (chunk: any[]) => void,
+    chunkSize: number = 100,
+  ): Promise<void> {
+    try {
+      const query = `
+        from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+          |> range(start: ${timeRange})
+          |> filter(fn: (r) => r["_measurement"] == "realtime")
+          |> filter(fn: (r) => r["device_id"] == "${deviceId}")
+          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+          |> sort(columns: ["_time"], desc: true)
+      `;
+
+      let chunk = [];
+      return new Promise((resolve, reject) => {
+        this.queryApi.queryRows(query, {
+          next: (row, tableMeta) => {
+            const record = tableMeta.toObject(row);
+            chunk.push(record);
+
+            if (chunk.length >= chunkSize) {
+              onChunk([...chunk]);
+              chunk = [];
+            }
+          },
+          error: (error) => {
+            this.logger.error(`Streaming query failed for device ${deviceId}`, error);
+            reject(error);
+          },
+          complete: () => {
+            // Send remaining chunk if any
+            if (chunk.length > 0) {
+              onChunk(chunk);
+            }
+            resolve();
+          },
+        });
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to stream realtime data for device ${deviceId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async streamSPCData(
+    deviceId: string,
+    timeRange: string = '-1h',
+    onChunk: (chunk: any[]) => void,
+    chunkSize: number = 100,
+  ): Promise<void> {
+    try {
+      const query = `
+        from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+          |> range(start: ${timeRange})
+          |> filter(fn: (r) => r["_measurement"] == "spc")
+          |> filter(fn: (r) => r["device_id"] == "${deviceId}")
+          |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+          |> sort(columns: ["_time"], desc: true)
+      `;
+
+      let chunk = [];
+      return new Promise((resolve, reject) => {
+        this.queryApi.queryRows(query, {
+          next: (row, tableMeta) => {
+            const record = tableMeta.toObject(row);
+            chunk.push(record);
+
+            if (chunk.length >= chunkSize) {
+              onChunk([...chunk]);
+              chunk = [];
+            }
+          },
+          error: (error) => {
+            this.logger.error(`SPC streaming query failed for device ${deviceId}`, error);
+            reject(error);
+          },
+          complete: () => {
+            // Send remaining chunk if any
+            if (chunk.length > 0) {
+              onChunk(chunk);
+            }
+            resolve();
+          },
+        });
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to stream SPC data for device ${deviceId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
   async flush(): Promise<void> {
     try {
       await this.writeApi.flush();

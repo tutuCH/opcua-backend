@@ -5,6 +5,7 @@ import { Reflector } from '@nestjs/core';
 import { UserOwnershipGuard } from './auth/strategies/user.ownership.guard';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
+import * as compression from 'compression';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -12,6 +13,20 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     rawBody: true,
   });
+
+  // Enable compression for responses (gzip/deflate)
+  app.use(compression({
+    level: 6, // Balance between compression speed and ratio
+    threshold: 1024, // Only compress responses larger than 1KB
+    filter: (req, res) => {
+      // Don't compress WebSocket responses
+      if (req.headers.upgrade) {
+        return false;
+      }
+      // Use default compression filter for other responses
+      return compression.filter(req, res);
+    },
+  }));
 
   // Get configuration service
   const configService = app.get(ConfigService);
@@ -68,6 +83,8 @@ async function bootstrap() {
   logger.log(
     `📊 WebSocket events: subscribe-machine, realtime-update, spc-update, machine-alert`,
   );
+  logger.log(`📈 Historical data API: REST endpoints with pagination and streaming`);
+  logger.log(`🗜️ Response compression: Enabled (gzip/deflate, 1KB+ threshold)`);
 
   // Log demo-specific information
   const mockDataEnabled = configService.get('mockData.enabled');

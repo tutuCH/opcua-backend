@@ -113,7 +113,7 @@ export class MessageProcessorService implements OnModuleInit {
 
   // Consumer methods - process different message types
   private async processRealtimeMessage(job: MessageJob): Promise<void> {
-    const { topic, payload } = job.data;
+    const { payload } = job.data;
     const data: RealtimeData = payload;
 
     try {
@@ -140,8 +140,7 @@ export class MessageProcessorService implements OnModuleInit {
         lastUpdated: new Date().toISOString(),
       });
 
-      // Broadcast to WebSocket clients
-      this.machineGateway.broadcastRealtimeUpdate(data.devId, data);
+      // WebSocket broadcasting will be handled by Redis pub/sub in MachineGateway
 
       // Publish processed event
       await this.redisService.publish('mqtt:realtime:processed', {
@@ -164,7 +163,7 @@ export class MessageProcessorService implements OnModuleInit {
   }
 
   private async processSPCMessage(job: MessageJob): Promise<void> {
-    const { topic, payload } = job.data;
+    const { payload } = job.data;
     const data: SPCData = payload;
 
     try {
@@ -175,8 +174,7 @@ export class MessageProcessorService implements OnModuleInit {
       // Store in InfluxDB
       await this.influxDbService.writeSPCData(data);
 
-      // Broadcast to WebSocket clients
-      this.machineGateway.broadcastSPCUpdate(data.devId, data);
+      // WebSocket broadcasting will be handled by Redis pub/sub in MachineGateway
 
       // Publish processed event
       await this.redisService.publish('mqtt:spc:processed', {
@@ -198,7 +196,7 @@ export class MessageProcessorService implements OnModuleInit {
   }
 
   private async processTechMessage(job: MessageJob): Promise<void> {
-    const { topic, payload } = job.data;
+    const { payload } = job.data;
 
     try {
       if (!payload.devId) {
@@ -212,11 +210,7 @@ export class MessageProcessorService implements OnModuleInit {
         3600, // Cache for 1 hour
       );
 
-      // Broadcast to WebSocket clients
-      this.machineGateway.broadcastRealtimeUpdate(payload.devId, {
-        type: 'tech_config',
-        data: payload.Data,
-      });
+      // Tech config will be available via Redis cache and can be requested via WebSocket
 
       this.logger.debug(
         `Processed tech configuration for device ${payload.devId}`,
@@ -234,8 +228,7 @@ export class MessageProcessorService implements OnModuleInit {
     const { deviceId, alert } = job.data;
 
     try {
-      // Broadcast critical alert immediately
-      this.machineGateway.broadcastMachineAlert(deviceId, alert);
+      // Alert broadcasting will be handled by Redis pub/sub in MachineGateway
 
       // Store in Redis for alert history
       await this.redisService.lpush(

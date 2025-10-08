@@ -5,10 +5,7 @@ import { Machine } from '../machines/entities/machine.entity';
 import { RedisModule } from '../redis/redis.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Machine]),
-    RedisModule,
-  ],
+  imports: [TypeOrmModule.forFeature([Machine]), RedisModule],
   providers: [MockDataService],
   exports: [MockDataService],
 })

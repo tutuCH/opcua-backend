@@ -20,10 +20,10 @@ import { InfluxDBService } from '../influxdb/influxdb.service';
   transports: ['websocket'],
   // Add connection limits and timeouts
   maxHttpBufferSize: 1e6, // 1MB buffer limit
-  pingTimeout: 60000,     // 60 second ping timeout
-  pingInterval: 25000,    // 25 second ping interval
-  upgradeTimeout: 10000,  // 10 second upgrade timeout
-  allowEIO3: false,       // Disable legacy Engine.IO v3
+  pingTimeout: 60000, // 60 second ping timeout
+  pingInterval: 25000, // 25 second ping interval
+  upgradeTimeout: 10000, // 10 second upgrade timeout
+  allowEIO3: false, // Disable legacy Engine.IO v3
 })
 export class MachineGateway
   implements OnGatewayConnection, OnGatewayDisconnect
@@ -46,34 +46,39 @@ export class MachineGateway
 
   handleConnection(client: Socket) {
     const clientIP = client.handshake.address;
-    
+
     // Check connection limit per IP
     const currentConnections = this.connectionsByIP.get(clientIP) || 0;
     if (currentConnections >= this.MAX_CONNECTIONS_PER_IP) {
-      this.logger.error(`Connection limit exceeded for IP ${clientIP} (${currentConnections}/${this.MAX_CONNECTIONS_PER_IP})`);
-      client.emit('error', { 
-        message: 'Connection limit exceeded. Please close other connections and try again.',
-        code: 'CONNECTION_LIMIT_EXCEEDED'
+      this.logger.error(
+        `Connection limit exceeded for IP ${clientIP} (${currentConnections}/${this.MAX_CONNECTIONS_PER_IP})`,
+      );
+      client.emit('error', {
+        message:
+          'Connection limit exceeded. Please close other connections and try again.',
+        code: 'CONNECTION_LIMIT_EXCEEDED',
       });
       client.disconnect(true);
       return;
     }
-    
+
     // Increment connection count for this IP
     this.connectionsByIP.set(clientIP, currentConnections + 1);
-    
-    this.logger.log(`Client connected: ${client.id} from ${clientIP} (${currentConnections + 1}/${this.MAX_CONNECTIONS_PER_IP})`);
-    
+
+    this.logger.log(
+      `Client connected: ${client.id} from ${clientIP} (${currentConnections + 1}/${this.MAX_CONNECTIONS_PER_IP})`,
+    );
+
     // Set connection timeout
     const connectionTimeout = setTimeout(() => {
       this.logger.warn(`Client ${client.id} timed out - disconnecting`);
       client.disconnect(true);
     }, 300000); // 5 minutes timeout
-    
+
     client.data.connectionTimeout = connectionTimeout;
     client.data.connectedAt = new Date();
     client.data.clientIP = clientIP;
-    
+
     // Clear timeout on any activity
     client.onAny(() => {
       if (client.data.connectionTimeout) {
@@ -85,19 +90,19 @@ export class MachineGateway
         }, 300000);
       }
     });
-    
-    client.emit('connection', { 
+
+    client.emit('connection', {
       message: 'Connected to OPC UA Dashboard',
       serverTime: new Date().toISOString(),
       clientId: client.id,
       connectionsFromIP: currentConnections + 1,
-      maxConnections: this.MAX_CONNECTIONS_PER_IP
+      maxConnections: this.MAX_CONNECTIONS_PER_IP,
     });
   }
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
-    
+
     // Decrement connection count for this IP
     const clientIP = client.data?.clientIP || client.handshake.address;
     if (clientIP) {
@@ -107,9 +112,11 @@ export class MachineGateway
       } else {
         this.connectionsByIP.set(clientIP, currentConnections - 1);
       }
-      this.logger.debug(`IP ${clientIP} now has ${Math.max(0, currentConnections - 1)} connections`);
+      this.logger.debug(
+        `IP ${clientIP} now has ${Math.max(0, currentConnections - 1)} connections`,
+      );
     }
-    
+
     // Clear connection timeout
     if (client.data?.connectionTimeout) {
       clearTimeout(client.data.connectionTimeout);
@@ -119,19 +126,23 @@ export class MachineGateway
     for (const [deviceId, clients] of this.connectedClients.entries()) {
       if (clients.has(client.id)) {
         clients.delete(client.id);
-        this.logger.debug(`Removed client ${client.id} from machine ${deviceId}`);
+        this.logger.debug(
+          `Removed client ${client.id} from machine ${deviceId}`,
+        );
         if (clients.size === 0) {
           this.connectedClients.delete(deviceId);
           this.logger.debug(`No more clients for machine ${deviceId}`);
         }
       }
     }
-    
+
     // Log connection statistics
-    const connectionDuration = client.data?.connectedAt 
-      ? Date.now() - client.data.connectedAt.getTime() 
+    const connectionDuration = client.data?.connectedAt
+      ? Date.now() - client.data.connectedAt.getTime()
       : 0;
-    this.logger.debug(`Client ${client.id} was connected for ${Math.round(connectionDuration / 1000)}s`);
+    this.logger.debug(
+      `Client ${client.id} was connected for ${Math.round(connectionDuration / 1000)}s`,
+    );
   }
 
   @SubscribeMessage('subscribe-machine')
@@ -166,23 +177,8 @@ export class MachineGateway
         });
       }
 
-      // Send recent historical data
-      try {
-        const recentData = await this.influxDbService.queryRealtimeData(
-          deviceId,
-          '-5m',
-        );
-        client.emit('machine-history', {
-          deviceId,
-          data: recentData,
-          timeRange: '-5m',
-        });
-      } catch (historyError) {
-        this.logger.warn(
-          `Failed to fetch history for ${deviceId}:`,
-          historyError,
-        );
-      }
+      // Note: Historical data should be fetched via REST API endpoints
+      // Removed automatic history sending to prevent large data transfers over WebSocket
 
       client.emit('subscription-confirmed', { deviceId });
       this.logger.log(`Client ${client.id} subscribed to machine ${deviceId}`);
@@ -247,48 +243,17 @@ export class MachineGateway
     }
   }
 
-  @SubscribeMessage('get-machine-history')
-  async handleGetMachineHistory(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { deviceId: string; timeRange?: string },
-  ) {
-    const { deviceId, timeRange = '-1h' } = payload;
-
-    try {
-      const realtimeData = await this.influxDbService.queryRealtimeData(
-        deviceId,
-        timeRange,
-      );
-      const spcData = await this.influxDbService.querySPCData(
-        deviceId,
-        timeRange,
-      );
-
-      client.emit('machine-history', {
-        deviceId,
-        data: {
-          realtime: realtimeData,
-          spc: spcData,
-        },
-        timeRange,
-      });
-    } catch (error) {
-      this.logger.error(
-        `Failed to get machine history for ${deviceId}:`,
-        error,
-      );
-      client.emit('error', { message: 'Failed to get machine history' });
-    }
-  }
+  // Removed handleGetMachineHistory method - use REST API endpoints instead:
+  // GET /machines/:id/realtime-history for paginated realtime data
+  // GET /machines/:id/spc-history for paginated SPC data
+  // GET /machines/:id/history/stream for streaming large datasets
 
   // Method called by MQTT processor when new data arrives
   broadcastRealtimeUpdate(deviceId: string, data: any) {
     const room = `machine-${deviceId}`;
     const subscribedCount = this.connectedClients.get(deviceId)?.size || 0;
 
-    this.logger.log(
-      `🔄 broadcastRealtimeUpdate called for device ${deviceId}`,
-    );
+    this.logger.log(`🔄 broadcastRealtimeUpdate called for device ${deviceId}`);
     this.logger.debug(
       `📊 Broadcasting realtime update to room ${room} with ${subscribedCount} subscribers`,
     );
@@ -316,9 +281,7 @@ export class MachineGateway
     const room = `machine-${deviceId}`;
     const subscribedCount = this.connectedClients.get(deviceId)?.size || 0;
 
-    this.logger.log(
-      `🔄 broadcastSPCUpdate called for device ${deviceId}`,
-    );
+    this.logger.log(`🔄 broadcastSPCUpdate called for device ${deviceId}`);
     this.logger.debug(
       `📊 Broadcasting SPC update to room ${room} with ${subscribedCount} subscribers`,
     );

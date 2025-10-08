@@ -111,7 +111,9 @@ export class MockDataService implements OnModuleInit {
 
       // Start generating mock data
       await this.startMockDataGeneration(machines);
-      this.logger.log('✅ Mock data generation with Redis bypass initialized successfully');
+      this.logger.log(
+        '✅ Mock data generation with Redis bypass initialized successfully',
+      );
     } catch (error) {
       this.logger.error('Failed to initialize mock data with Redis:', error);
     }
@@ -414,8 +416,12 @@ export class MockDataService implements OnModuleInit {
 
   private async injectDataToRedis(data: any) {
     try {
-      const queueName = data.topic === 'realtime' ? 'mqtt:realtime' :
-                        data.topic === 'spc' ? 'mqtt:spc' : 'mqtt:tech';
+      const queueName =
+        data.topic === 'realtime'
+          ? 'mqtt:realtime'
+          : data.topic === 'spc'
+            ? 'mqtt:spc'
+            : 'mqtt:tech';
 
       const message = {
         topic: `factory/1/machine/${data.devId}/${data.topic}`,
@@ -426,7 +432,9 @@ export class MockDataService implements OnModuleInit {
 
       await this.redisService.enqueueMQTTMessage(queueName, message);
 
-      this.logger.debug(`🔄 Injected ${data.topic} data for ${data.devId} directly to Redis queue ${queueName}`);
+      this.logger.debug(
+        `🔄 Injected ${data.topic} data for ${data.devId} directly to Redis queue ${queueName}`,
+      );
     } catch (error) {
       this.logger.error('Failed to inject data to Redis:', error);
     }

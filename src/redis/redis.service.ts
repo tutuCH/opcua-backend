@@ -22,7 +22,9 @@ export class RedisService implements OnModuleInit {
     try {
       this.redis = new Redis(redisConfig);
       await this.redis.connect();
-      this.logger.log(`✅ Main Redis connection established to ${redisConfig.host}:${redisConfig.port}`);
+      this.logger.log(
+        `✅ Main Redis connection established to ${redisConfig.host}:${redisConfig.port}`,
+      );
     } catch (error) {
       this.logger.error('❌ Failed to connect main Redis connection:', error);
       this.redis = null;
@@ -52,7 +54,9 @@ export class RedisService implements OnModuleInit {
     if (this.redis && this.subscriber && this.publisher) {
       this.logger.log(`🔗 All Redis connections established successfully`);
     } else {
-      this.logger.warn(`⚠️ Partial Redis connectivity - Main: ${!!this.redis}, Subscriber: ${!!this.subscriber}, Publisher: ${!!this.publisher}`);
+      this.logger.warn(
+        `⚠️ Partial Redis connectivity - Main: ${!!this.redis}, Subscriber: ${!!this.subscriber}, Publisher: ${!!this.publisher}`,
+      );
     }
   }
 
@@ -200,7 +204,9 @@ export class RedisService implements OnModuleInit {
         // Try to reinitialize subscriber
         await this.reinitializeSubscriber();
         if (!this.subscriber) {
-          this.logger.error(`❌ Failed to reinitialize Redis subscriber for channel ${channel}`);
+          this.logger.error(
+            `❌ Failed to reinitialize Redis subscriber for channel ${channel}`,
+          );
           return;
         }
       }
