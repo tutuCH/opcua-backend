@@ -73,12 +73,13 @@ The application implements a multi-stage IoT data processing pipeline:
 
 ### Key Architecture Patterns
 
-- **Global Guards**: `JwtAuthGuard` and `UserOwnershipGuard` applied globally via `APP_GUARD`
-- **Public Routes**: Use `@Public()` decorator to bypass authentication  
-- **User ID Extraction**: Use `@JwtUserId()` decorator to extract user ID from JWT tokens
+- **Global Guards**: `JwtAuthGuard` and `UserOwnershipGuard` applied globally via `APP_GUARD` in `src/app.module.ts:90-97`
+- **Public Routes**: Use `@Public()` decorator to bypass authentication (defined in `src/auth/decorators/public.decorator.ts:4`)
+- **User ID Extraction**: Use `@JwtUserId()` decorator to extract user ID from JWT tokens (defined in `src/auth/decorators/jwt-user-id.decorator.ts:16`)
 - **Queue-Based Processing**: Redis lists for reliable message processing with age validation
-- **Retention Policy Compliance**: Timestamp validation prevents InfluxDB retention violations
+- **Retention Policy Compliance**: Timestamp validation prevents InfluxDB retention violations (messages older than 1 hour are dropped in `src/mqtt-processor/mqtt-processor.service.ts:234-244` and `src/influxdb/influxdb.service.ts:98-108`)
 - **WebSocket Event System**: Topic-based real-time updates (`subscribe-machine`, `realtime-update`, `spc-update`)
+- **Redis Pub/Sub Architecture**: WebSocket gateway subscribes to Redis channels (`mqtt:realtime:processed`, `mqtt:spc:processed`, `machine:alerts`) for broadcasting updates to clients
 
 ### Database Configuration
 
@@ -87,19 +88,24 @@ The application implements a multi-stage IoT data processing pipeline:
 - Database: opcua_dashboard
 - Entities: User, Factory, Machine, UserSubscription
 - Auto-sync enabled in non-production environments
+- Configuration: `src/app.module.ts:34-50`
 
 **InfluxDB (Time-Series)**:
 - URL: http://localhost:8086
 - Organization: opcua-org
-- Bucket: machine-data  
+- Bucket: machine-data
 - Retention: 1 hour minimum (configurable)
 - Token authentication required
+- Configuration: `src/influxdb/influxdb.service.ts:72-94`
+- Measurements: `realtime` (machine status, temperatures) and `spc` (cycle data, injection metrics)
 
 **Redis (Cache/Queue)**:
 - Host: localhost:6379
 - Password authentication
 - Queues: `mqtt:realtime`, `mqtt:spc`, `mqtt:tech`
 - Publisher/subscriber channels for real-time updates
+- Configuration: `src/redis/redis.service.ts:11-61`
+- Automatic cleanup of messages older than 1 hour on startup
 
 ### Demo Environment
 
@@ -119,19 +125,38 @@ MQTT topics follow the pattern: `factory/{factoryId}/machine/{deviceId}/{dataTyp
 - **IoT Core**: Dynamic thing creation/deletion for MQTT clients
 - **Cognito**: User authentication and management
 
-### Important Notes
+### Authentication
 
-- Database migrated from MySQL to PostgreSQL (old config preserved in comments)
-- CORS configured for multiple origins including localhost and Vercel deployments
-- WebSocket endpoint: `ws://localhost:3000/socket.io/`
-- Mock data generation can be enabled via `ENABLE_MOCK_DATA=true` environment variable
-- Stripe service includes production-safe error handling with environment detection
-- InfluxDB retention policy violations prevented through timestamp age validation
-- use curl --location 'http://localhost:3000/auth/login' \
+To get an access token for API testing:
+```bash
+curl --location 'http://localhost:3000/auth/login' \
 --header 'Content-Type: application/json' \
 --data-raw '{
     "email": "tuchenhsien@gmail.com",
     "password": "abc123"
 }'
+```
 
-to get access_token for backend api authentication token
+### API Endpoints
+
+**Machine Historical Data** (with user ownership verification):
+- `GET /machines/:id/realtime-history` - Paginated realtime data with query params: `timeRange`, `limit`, `offset`, `aggregate`
+- `GET /machines/:id/spc-history` - Paginated SPC data with query params: `timeRange`, `limit`, `offset`, `aggregate`
+- `GET /machines/:id/status` - Current machine status from Redis cache
+- `GET /machines/:id/history/stream` - Streaming large datasets with query params: `timeRange`, `dataType`
+
+**WebSocket Events**:
+- Client → Server: `subscribe-machine`, `unsubscribe-machine`, `get-machine-status`, `ping`
+- Server → Client: `realtime-update`, `spc-update`, `machine-alert`, `machine-status`, `pong`
+
+### Important Notes
+
+- Database migrated from MySQL to PostgreSQL (old config preserved in `src/app.module.ts:52-63`)
+- CORS configured for multiple origins including localhost and Vercel deployments (see `src/main.ts:38-64`)
+- WebSocket endpoint: `ws://localhost:3000/socket.io/`
+- Mock data generation can be enabled via `ENABLE_MOCK_DATA=true` environment variable
+- Stripe service includes production-safe error handling with environment detection
+- InfluxDB retention policy violations prevented through timestamp age validation
+- Response compression enabled (gzip/deflate) for responses >1KB (see `src/main.ts:18-29`)
+- WebSocket connection limits: 5 connections per IP address (configured in `src/websocket/machine.gateway.ts:37`)
+- MQTT processor validates machine existence in database before processing messages (see `src/mqtt-processor/mqtt-processor.service.ts:148-168`)

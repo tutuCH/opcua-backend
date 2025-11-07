@@ -24,7 +24,17 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+OPC UA Backend - A NestJS-based backend for an IoT dashboard with real-time machine monitoring capabilities.
+
+## Quick Deploy to AWS
+
+Deploy all services (PostgreSQL, InfluxDB, Redis, MQTT, NestJS) to AWS EC2 in one command:
+
+```bash
+./scripts/deploy-demo.sh
+```
+
+See [DEPLOY.md](./DEPLOY.md) for complete deployment documentation.
 
 ## Installation
 

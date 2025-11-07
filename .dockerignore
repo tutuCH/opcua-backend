@@ -1,0 +1,27 @@
+# dependencies
+node_modules
+npm-debug.log
+yarn.lock
+
+# build output
+dist
+coverage
+
+# vcs / editor / os
+.git
+.gitignore
+.vscode
+.DS_Store
+
+# demo and local helpers not needed in image
+demoMqttServer
+demo_frontend
+docs
+test
+websocket-test.html
+websocket-test.js
+test-websocket-direct.js
+CLAUDE.md
+.claude
+AGENTS.md
+
