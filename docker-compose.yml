@@ -71,15 +71,15 @@ services:
     volumes:
       - influxdb_data:/var/lib/influxdb2
       - influxdb_config:/etc/influxdb2
-    # Expose only if you want public access: "8086:8086"
-    # ports:
-    #   - "8086:8086"
+    ports:
+      - "8086:8086"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8086/ping"]
+      test: ["CMD-SHELL", "influx ping || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   mosquitto:
     image: eclipse-mosquitto:2
