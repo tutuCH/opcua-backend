@@ -26,9 +26,32 @@
 
 OPC UA Backend - A NestJS-based backend for an IoT dashboard with real-time machine monitoring capabilities.
 
-## Quick Deploy to AWS
+## Quick Deploy to AWS EC2
 
-Deploy all services (PostgreSQL, InfluxDB, Redis, MQTT, NestJS) to AWS EC2 in one command:
+### Option 1: Deploy Directly on EC2 Instance (Recommended)
+
+SSH into your EC2 instance and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tutuCH/opcua-backend/master/scripts/deploy-ec2.sh | bash
+```
+
+Or download and run manually:
+
+```bash
+wget https://raw.githubusercontent.com/tutuCH/opcua-backend/master/scripts/deploy-ec2.sh
+chmod +x deploy-ec2.sh
+./deploy-ec2.sh
+```
+
+This single script will:
+- ✅ Install Docker and dependencies
+- ✅ Clone the repository
+- ✅ Generate secure credentials
+- ✅ Build and start all services
+- ✅ Save deployment info to `/opt/app/deployment-credentials.txt`
+
+### Option 2: Deploy from Local Machine
 
 ```bash
 ./scripts/deploy-demo.sh
