@@ -43,7 +43,9 @@ import { DebugModule } from './debug/debug.module';
         entities: [User, Factory, Machine],
         synchronize: configService.get('app.environment') !== 'production',
         autoLoadEntities: true,
-        ssl: configService.get('app.isProduction')
+        // Disable SSL for Docker Compose deployments (local PostgreSQL)
+        // Enable SSL only for managed PostgreSQL services (AWS RDS, etc.)
+        ssl: process.env.POSTGRES_SSL === 'true'
           ? { rejectUnauthorized: false }
           : false,
       }),
