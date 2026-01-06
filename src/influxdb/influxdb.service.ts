@@ -15,7 +15,7 @@ export interface RealtimeData {
   timestamp: number;
   Data: {
     OT: number;
-    ATST: number;
+    ASTS: number;
     OPM: number;
     STS: number;
     T1: number;
@@ -111,7 +111,7 @@ export class InfluxDBService implements OnModuleInit {
         .tag('device_id', data.devId)
         .tag('topic', data.topic)
         .floatField('oil_temp', data.Data.OT)
-        .intField('auto_start', data.Data.ATST)
+        .intField('auto_start', data.Data.ASTS)
         .intField('operate_mode', data.Data.OPM)
         .intField('status', data.Data.STS)
         .floatField('temp_1', data.Data.T1)
@@ -226,7 +226,10 @@ export class InfluxDBService implements OnModuleInit {
             result.push(record);
           },
           error: (error) => {
-            this.logger.error(`Paginated query failed for device ${deviceId}`, error);
+            this.logger.error(
+              `Paginated query failed for device ${deviceId}`,
+              error,
+            );
             reject(error);
           },
           complete: () => {
@@ -271,7 +274,10 @@ export class InfluxDBService implements OnModuleInit {
             result.push(record);
           },
           error: (error) => {
-            this.logger.error(`Paginated SPC query failed for device ${deviceId}`, error);
+            this.logger.error(
+              `Paginated SPC query failed for device ${deviceId}`,
+              error,
+            );
             reject(error);
           },
           complete: () => {
@@ -317,7 +323,10 @@ export class InfluxDBService implements OnModuleInit {
             result.push(record);
           },
           error: (error) => {
-            this.logger.error(`Aggregated query failed for device ${deviceId}`, error);
+            this.logger.error(
+              `Aggregated query failed for device ${deviceId}`,
+              error,
+            );
             reject(error);
           },
           complete: () => {
@@ -361,7 +370,10 @@ export class InfluxDBService implements OnModuleInit {
             result.push(record);
           },
           error: (error) => {
-            this.logger.error(`Aggregated SPC query failed for device ${deviceId}`, error);
+            this.logger.error(
+              `Aggregated SPC query failed for device ${deviceId}`,
+              error,
+            );
             reject(error);
           },
           complete: () => {
@@ -405,7 +417,10 @@ export class InfluxDBService implements OnModuleInit {
             count = record._value || 0;
           },
           error: (error) => {
-            this.logger.error(`Count query failed for device ${deviceId}`, error);
+            this.logger.error(
+              `Count query failed for device ${deviceId}`,
+              error,
+            );
             reject(error);
           },
           complete: () => {
@@ -444,7 +459,10 @@ export class InfluxDBService implements OnModuleInit {
             count = record._value || 0;
           },
           error: (error) => {
-            this.logger.error(`SPC count query failed for device ${deviceId}`, error);
+            this.logger.error(
+              `SPC count query failed for device ${deviceId}`,
+              error,
+            );
             reject(error);
           },
           complete: () => {
@@ -492,7 +510,10 @@ export class InfluxDBService implements OnModuleInit {
             }
           },
           error: (error) => {
-            this.logger.error(`Streaming query failed for device ${deviceId}`, error);
+            this.logger.error(
+              `Streaming query failed for device ${deviceId}`,
+              error,
+            );
             reject(error);
           },
           complete: () => {
@@ -542,7 +563,10 @@ export class InfluxDBService implements OnModuleInit {
             }
           },
           error: (error) => {
-            this.logger.error(`SPC streaming query failed for device ${deviceId}`, error);
+            this.logger.error(
+              `SPC streaming query failed for device ${deviceId}`,
+              error,
+            );
             reject(error);
           },
           complete: () => {

@@ -81,7 +81,7 @@ CDN → Frontend
   "timestamp": 1754016540000,           // Millisecond epoch timestamp for time
   "Data": {
     "OT": 45.8,                         // Oil Temperature (°C) - ensures hydraulic oil is within safe operating limits
-    "ATST": 0,                          // Auto-start status: 0 = disabled, 1 = enabled
+    "ASTS": 0,                          // Auto-start status: 0 = disabled, 1 = enabled
     "OPM": 2,                           // Operate Mode:
                                         //   0 = Manual
                                         //   1 = Semi-auto

@@ -477,7 +477,8 @@ export class MachinesService {
   async getMachineStatus(machineName: string) {
     try {
       // Get current status from Redis cache
-      const cachedStatus = await this.redisService.getMachineStatus(machineName);
+      const cachedStatus =
+        await this.redisService.getMachineStatus(machineName);
 
       if (cachedStatus) {
         return {
@@ -494,7 +495,8 @@ export class MachinesService {
         '-5m',
       );
 
-      const latestPoint = latestData.length > 0 ? latestData[latestData.length - 1] : null;
+      const latestPoint =
+        latestData.length > 0 ? latestData[latestData.length - 1] : null;
 
       return {
         deviceId: machineName,
@@ -503,7 +505,10 @@ export class MachinesService {
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
-      this.logger.error(`Failed to get machine status for ${machineName}:`, error);
+      this.logger.error(
+        `Failed to get machine status for ${machineName}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -519,7 +524,9 @@ export class MachinesService {
     try {
       const { timeRange, dataType } = options;
 
-      res.write('{"status":"streaming","deviceId":"' + machineName + '","data":[');
+      res.write(
+        '{"status":"streaming","deviceId":"' + machineName + '","data":[',
+      );
 
       let isFirstChunk = true;
 

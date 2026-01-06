@@ -45,9 +45,10 @@ import { DebugModule } from './debug/debug.module';
         autoLoadEntities: true,
         // Disable SSL for Docker Compose deployments (local PostgreSQL)
         // Enable SSL only for managed PostgreSQL services (AWS RDS, etc.)
-        ssl: process.env.POSTGRES_SSL === 'true'
-          ? { rejectUnauthorized: false }
-          : false,
+        ssl:
+          process.env.POSTGRES_SSL === 'true'
+            ? { rejectUnauthorized: false }
+            : false,
       }),
     }),
 

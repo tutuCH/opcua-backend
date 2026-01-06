@@ -170,7 +170,7 @@ socket.on('realtime-update', (data) => {
       timestamp: 1642248599000,
       Data: {
         OT: 52.3,      // Oil Temperature (°C)
-        ATST: 0,       // Auto Time Start
+        ASTS: 0,       // Auto Time Start
         OPM: 2,        // Operation Mode (1=Semi-auto, 2=Eye auto, 3=Time auto)
         STS: 2,        // Status (2=Production)
         T1: 221.5,     // Temperature Zone 1 (°C)

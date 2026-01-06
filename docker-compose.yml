@@ -8,6 +8,7 @@ services:
     container_name: opcua-backend
     env_file:
       - .env.compose
+      - .env.local
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,7 +68,7 @@ services:
       DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG}
       DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET}
       DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN}
-      DOCKER_INFLUXDB_INIT_RETENTION: 1h
+      DOCKER_INFLUXDB_INIT_RETENTION: 720h  # 30 days
     volumes:
       - influxdb_data:/var/lib/influxdb2
       - influxdb_config:/etc/influxdb2

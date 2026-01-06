@@ -422,6 +422,67 @@ export class BillingSubscriptionService {
             : null,
         });
 
+        // If subscription is canceled, check for any active subscriptions
+        if (stripeSubscription.status === 'canceled') {
+          this.logger.log(
+            `Local subscription ${subscription.stripeSubscriptionId} is canceled, checking for active subscriptions...`,
+          );
+
+          const user = await this.userRepository.findOne({ where: { userId } });
+          if (user?.stripeCustomerId) {
+            const activeSubscriptions = await this.stripe.subscriptions.list({
+              customer: user.stripeCustomerId,
+              status: 'active',
+              expand: ['data.items.data.price.product'],
+            });
+
+            if (activeSubscriptions.data.length > 0) {
+              // Found an active subscription, update local record and return it
+              const activeStripeSubscription = activeSubscriptions.data[0];
+              const activePrice = activeStripeSubscription.items.data[0]?.price;
+              const activeProduct = activePrice?.product as Stripe.Product;
+              const activeFirstItem = activeStripeSubscription.items.data[0];
+
+              this.logger.log(
+                `Found active subscription ${activeStripeSubscription.id}, syncing to database`,
+              );
+
+              // Update local subscription record with active subscription
+              await this.updateUserSubscription(userId, {
+                stripeSubscriptionId: activeStripeSubscription.id,
+                stripeCustomerId: user.stripeCustomerId,
+                planLookupKey:
+                  activePrice?.lookup_key || activeStripeSubscription.id,
+                status: activeStripeSubscription.status,
+                currentPeriodStart: activeFirstItem
+                  ? new Date(activeFirstItem.current_period_start * 1000)
+                  : null,
+                currentPeriodEnd: activeFirstItem
+                  ? new Date(activeFirstItem.current_period_end * 1000)
+                  : null,
+              });
+
+              return {
+                subscription: {
+                  id: activeStripeSubscription.id,
+                  status: activeStripeSubscription.status,
+                  plan: {
+                    id: activePrice?.lookup_key || activeStripeSubscription.id,
+                    name: activeProduct?.name || 'Unknown Plan',
+                    price: activePrice ? activePrice.unit_amount / 100 : 0,
+                    currency: activePrice?.currency?.toUpperCase() || 'USD',
+                    interval: activePrice?.recurring?.interval || 'month',
+                  },
+                  currentPeriodStart: activeFirstItem?.current_period_start,
+                  currentPeriodEnd: activeFirstItem?.current_period_end,
+                  cancelAtPeriodEnd:
+                    activeStripeSubscription.cancel_at_period_end,
+                },
+              };
+            }
+          }
+        }
+
         return {
           subscription: {
             id: stripeSubscription.id,
@@ -439,7 +500,16 @@ export class BillingSubscriptionService {
           },
         };
       } catch (error) {
-        this.logger.error('Error fetching subscription from Stripe:', error);
+        this.logger.error(
+          `Error fetching subscription from Stripe for user ${userId}:`,
+          {
+            message: error.message,
+            type: error.type,
+            statusCode: error.statusCode,
+            code: error.code,
+            stack: error.stack,
+          },
+        );
         return { subscription: null };
       }
     }
@@ -517,7 +587,16 @@ export class BillingSubscriptionService {
         },
       };
     } catch (error) {
-      this.logger.error('Error fetching subscription from Stripe:', error);
+      this.logger.error(
+        `Error fetching subscription from Stripe for user ${userId} (no local subscription):`,
+        {
+          message: error.message,
+          type: error.type,
+          statusCode: error.statusCode,
+          code: error.code,
+          stack: error.stack,
+        },
+      );
       return { subscription: null };
     }
   }

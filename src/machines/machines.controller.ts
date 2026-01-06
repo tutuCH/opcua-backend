@@ -170,10 +170,7 @@ export class MachinesController {
   }
 
   @Get(':id/status')
-  async getMachineStatus(
-    @Param('id') id: string,
-    @JwtUserId() userId: number,
-  ) {
+  async getMachineStatus(@Param('id') id: string, @JwtUserId() userId: number) {
     try {
       // Verify machine ownership
       await this.machinesService.findOneForUser(+id, userId);
@@ -184,7 +181,9 @@ export class MachinesController {
       }
 
       // Use Redis service directly for machine status
-      const status = await this.redisService.getMachineStatus(machine.machineName);
+      const status = await this.redisService.getMachineStatus(
+        machine.machineName,
+      );
 
       return {
         deviceId: machine.machineName,
@@ -242,7 +241,9 @@ export class MachinesController {
           realtime: dataType === 'spc' ? [] : realtimeData,
           spc: dataType === 'realtime' ? [] : spcData,
         },
-        totalRecords: (dataType === 'spc' ? 0 : realtimeData.length) + (dataType === 'realtime' ? 0 : spcData.length),
+        totalRecords:
+          (dataType === 'spc' ? 0 : realtimeData.length) +
+          (dataType === 'realtime' ? 0 : spcData.length),
       };
 
       res.json(responseData);
