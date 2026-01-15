@@ -54,11 +54,11 @@ curl -X POST 'http://localhost:3000/api/subscription/create-checkout-session' \
 
 **Request Parameters:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `lookupKey` | string | Yes | Stripe price lookup_key, price ID (starts with `price_`), or product ID (starts with `prod_`) |
-| `successUrl` | string | Yes | URL to redirect after successful payment. Use `{CHECKOUT_SESSION_ID}` placeholder to include session ID |
-| `cancelUrl` | string | Yes | URL to redirect if user cancels |
+| Field        | Type   | Required | Description                                                                                             |
+| ------------ | ------ | -------- | ------------------------------------------------------------------------------------------------------- |
+| `lookupKey`  | string | Yes      | Stripe price lookup*key, price ID (starts with `price*`), or product ID (starts with `prod\_`)          |
+| `successUrl` | string | Yes      | URL to redirect after successful payment. Use `{CHECKOUT_SESSION_ID}` placeholder to include session ID |
+| `cancelUrl`  | string | Yes      | URL to redirect if user cancels                                                                         |
 
 **Success Response (200 OK):**
 
@@ -75,6 +75,7 @@ curl -X POST 'http://localhost:3000/api/subscription/create-checkout-session' \
 **Error Responses:**
 
 - **400 Bad Request** - Invalid lookup key or Stripe not configured
+
   ```json
   {
     "statusCode": 400,
@@ -84,6 +85,7 @@ curl -X POST 'http://localhost:3000/api/subscription/create-checkout-session' \
   ```
 
 - **401 Unauthorized** - Invalid or missing JWT token
+
   ```json
   {
     "statusCode": 401,
@@ -123,9 +125,9 @@ curl -X POST 'http://localhost:3000/api/subscription/create-portal-session' \
 
 **Request Parameters:**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `returnUrl` | string | Yes | URL to redirect after user exits portal |
+| Field       | Type   | Required | Description                             |
+| ----------- | ------ | -------- | --------------------------------------- |
+| `returnUrl` | string | Yes      | URL to redirect after user exits portal |
 
 **Success Response (200 OK):**
 
@@ -224,11 +226,7 @@ curl -X GET 'http://localhost:3000/api/subscription/plans' \
       "price": 9.99,
       "currency": "USD",
       "interval": "month",
-      "features": [
-        "Up to 5 machines",
-        "Basic monitoring",
-        "Email support"
-      ]
+      "features": ["Up to 5 machines", "Basic monitoring", "Email support"]
     },
     {
       "id": "professional_monthly",
@@ -334,9 +332,9 @@ curl -X DELETE 'http://localhost:3000/api/subscription/sub_abc123xyz789' \
 
 **URL Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `subscriptionId` | string | Yes | Stripe subscription ID |
+| Parameter        | Type   | Required | Description            |
+| ---------------- | ------ | -------- | ---------------------- |
+| `subscriptionId` | string | Yes      | Stripe subscription ID |
 
 **Success Response (200 OK):**
 
@@ -400,10 +398,10 @@ curl -X POST 'http://localhost:3000/api/webhooks/stripe' \
 
 **Headers:**
 
-| Header | Type | Required | Description |
-|--------|------|----------|-------------|
-| `stripe-signature` | string | Yes | Stripe webhook signature for verification |
-| `Content-Type` | string | Yes | Must be `application/json` |
+| Header             | Type   | Required | Description                               |
+| ------------------ | ------ | -------- | ----------------------------------------- |
+| `stripe-signature` | string | Yes      | Stripe webhook signature for verification |
+| `Content-Type`     | string | Yes      | Must be `application/json`                |
 
 **Success Response (200 OK):**
 
@@ -430,14 +428,14 @@ curl -X POST 'http://localhost:3000/api/webhooks/stripe' \
 
 The webhook handler processes the following Stripe events:
 
-| Event Type | Description |
-|------------|-------------|
-| `checkout.session.completed` | Checkout session successfully completed |
-| `customer.subscription.created` | New subscription created |
+| Event Type                      | Description                              |
+| ------------------------------- | ---------------------------------------- |
+| `checkout.session.completed`    | Checkout session successfully completed  |
+| `customer.subscription.created` | New subscription created                 |
 | `customer.subscription.updated` | Subscription updated (plan change, etc.) |
-| `customer.subscription.deleted` | Subscription canceled/deleted |
-| `invoice.payment_succeeded` | Payment succeeded, subscription renewed |
-| `invoice.payment_failed` | Payment failed, subscription past due |
+| `customer.subscription.deleted` | Subscription canceled/deleted            |
+| `invoice.payment_succeeded`     | Payment succeeded, subscription renewed  |
+| `invoice.payment_failed`        | Payment failed, subscription past due    |
 
 ### Idempotency
 
@@ -488,14 +486,14 @@ When rate limits are exceeded, you'll receive:
 
 **Rate Limits by Endpoint:**
 
-| Endpoint | Limit | Period |
-|----------|-------|--------|
-| POST /create-checkout-session | 5 | 1 minute |
-| POST /create-portal-session | 10 | 1 minute |
-| GET /current | 30 | 1 minute |
-| GET /plans | 50 | 1 minute |
-| GET /payment-methods | 20 | 1 minute |
-| DELETE /:subscriptionId | 5 | 1 minute |
+| Endpoint                      | Limit | Period   |
+| ----------------------------- | ----- | -------- |
+| POST /create-checkout-session | 5     | 1 minute |
+| POST /create-portal-session   | 10    | 1 minute |
+| GET /current                  | 30    | 1 minute |
+| GET /plans                    | 50    | 1 minute |
+| GET /payment-methods          | 20    | 1 minute |
+| DELETE /:subscriptionId       | 5     | 1 minute |
 
 ---
 
@@ -505,9 +503,9 @@ Required environment variables in `.env` or `.env.local`:
 
 ```bash
 # Stripe Configuration
-STRIPE_SECRET_KEY=sk_test_51RwCz2HOHpiK2JjACjIn8UGlbSGWAYTOOqavqc9M8vB66LHft55zBiyCo8ReWCozsfDpUtgKhtaH9qSIrxT0whEw00SyRFIDhK
-STRIPE_PUBLISHABLE_KEY=pk_test_51RwCz2HOHpiK2JjAzAuGUrBU2HJU5a2GkyO2b5mRlC3vTVeKc9ZYikOaFcDOtekryJdbBOuddGFacnv96HczNHaD00NZ2WpxMp
-STRIPE_WEBHOOK_SECRET=whsec_282b3763fe4a23a46e87ef8bf4874bafc95294ee3ac654c2e43a8c50b9fffbb2
+STRIPE_SECRET_KEY=sk_test_your_key_here
+STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
 ```
 
 ---

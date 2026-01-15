@@ -21,6 +21,7 @@ The subscription API was returning `null` because the database had stale subscri
 ### 1. The Symptom
 
 API call to `/api/subscription/current` returned:
+
 ```json
 {
   "subscription": null
@@ -28,6 +29,7 @@ API call to `/api/subscription/current` returned:
 ```
 
 Despite:
+
 - Valid JWT token (userId: 1)
 - Active subscription visible in Stripe Dashboard
 - Successful payment confirmed via Stripe invoice
@@ -35,22 +37,27 @@ Despite:
 ### 2. Investigation Findings
 
 #### Database State (PostgreSQL)
+
 ```sql
 SELECT * FROM user_subscriptions WHERE user_id = 1;
 ```
 
 **Found**:
+
 - Old subscription: `sub_1S1rjhHOHpiK2JjAseTw6UKl`
 - Status: `active` (INCORRECT - actually canceled in Stripe)
 - Period end: `2025-09-30` (EXPIRED)
 
 #### Stripe State (API Query)
+
 ```bash
 stripe subscriptions list --customer cus_SxnJ6EbF2XdqIi
 ```
 
 **Found**:
+
 1. **Old Subscription** (`sub_1S1rjhHOHpiK2JjAseTw6UKl`):
+
    - Status: `canceled`
    - Canceled at: December 28, 2025
    - Reason: User-requested cancellation
@@ -67,16 +74,19 @@ stripe subscriptions list --customer cus_SxnJ6EbF2XdqIi
 **Timeline of Events**:
 
 1. **August 30, 2025**: User subscribed to Professional plan
+
    - Checkout completed successfully
    - Webhook `checkout.session.completed` sent by Stripe
    - ❌ **Webhook signature verification FAILED**
    - ❌ Database record NOT created
 
 2. **September 30, 2025**: Subscription period ended
+
    - Should have auto-renewed via `invoice.payment_succeeded` webhook
    - ❌ **Webhook never processed**
 
 3. **~December 28, 2025**: User canceled old subscription
+
    - Webhook `customer.subscription.deleted` sent
    - ❌ **Webhook never processed**
    - Database still shows `status = 'active'`
@@ -92,11 +102,13 @@ stripe subscriptions list --customer cus_SxnJ6EbF2XdqIi
 **File**: `.env.local` (line 39)
 
 **Before**:
+
 ```env
 STRIPE_WEBHOOK_SECRET=whsec_demo_key_not_required
 ```
 
 **The Problem**:
+
 - This is a placeholder/demo value, NOT a real webhook signing secret
 - Stripe webhooks include a signature header for security verification
 - Backend validates webhooks using `stripe.webhooks.constructEvent()` (webhook.controller.ts:84-93)
@@ -105,11 +117,12 @@ STRIPE_WEBHOOK_SECRET=whsec_demo_key_not_required
 - No database updates occur
 
 **Code Evidence** (webhook.controller.ts:84-93):
+
 ```typescript
 event = this.stripe.webhooks.constructEvent(
   body,
   signature,
-  webhookSecret,  // ❌ Using 'whsec_demo_key_not_required'
+  webhookSecret, // ❌ Using 'whsec_demo_key_not_required'
 );
 // If verification fails, throws error -> 400 response
 ```
@@ -150,12 +163,14 @@ WHERE user_id = 1;
 **Result**: API immediately returned correct subscription data ✅
 
 **Verification**:
+
 ```bash
 curl 'http://localhost:3000/api/subscription/current' \
   -H 'Authorization: Bearer <token>'
 ```
 
 Response:
+
 ```json
 {
   "subscription": {
@@ -180,12 +195,14 @@ Response:
 #### Step 1: Start Stripe CLI Webhook Forwarding
 
 **Command**:
+
 ```bash
 stripe listen --forward-to localhost:3000/api/webhooks/stripe \
-  --api-key sk_test_51RwCz2HOHpiK2JjACjIn8UGlbSGWAYTOOqavqc9M8vB66LHft55zBiyCo8ReWCozsfDpUtgKhtaH9qSIrxT0whEw00SyRFIDhK
+  --api-key sk_test_your_key_here
 ```
 
 **Output**:
+
 ```
 Ready! Your webhook signing secret is whsec_282b3763fe4a23a46e87ef8bf4874bafc95294ee3ac654c2e43a8c50b9fffbb2
 ```
@@ -195,9 +212,10 @@ Ready! Your webhook signing secret is whsec_282b3763fe4a23a46e87ef8bf4874bafc952
 **File**: `.env.local` (line 39)
 
 **Change**:
+
 ```diff
 - STRIPE_WEBHOOK_SECRET=whsec_demo_key_not_required
-+ STRIPE_WEBHOOK_SECRET=whsec_282b3763fe4a23a46e87ef8bf4874bafc95294ee3ac654c2e43a8c50b9fffbb2
++ STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
 ```
 
 #### Step 3: Restart Application
@@ -216,6 +234,7 @@ npm run start:dev
 **File**: `src/subscription/billing-subscription.service.ts`
 
 **Changes at lines 502-514** (catch block for local subscription):
+
 ```typescript
 } catch (error) {
   this.logger.error(
@@ -233,6 +252,7 @@ npm run start:dev
 ```
 
 **Changes at lines 589-601** (catch block for no local subscription):
+
 ```typescript
 } catch (error) {
   this.logger.error(
@@ -258,9 +278,11 @@ npm run start:dev
 Added three new diagnostic endpoints:
 
 #### 1. `GET /debug/subscription/user/:userId`
+
 **Purpose**: Complete diagnostic of user's subscription state
 
 **Response**:
+
 ```json
 {
   "timestamp": "2025-12-22T16:00:00Z",
@@ -296,9 +318,11 @@ Added three new diagnostic endpoints:
 ```
 
 #### 2. `POST /debug/subscription/sync/:userId`
+
 **Purpose**: Manually sync subscription from Stripe to database
 
 **Response**:
+
 ```json
 {
   "timestamp": "2025-12-22T16:00:00Z",
@@ -319,9 +343,11 @@ Added three new diagnostic endpoints:
 ```
 
 #### 3. `GET /debug/subscription/database-state`
+
 **Purpose**: Overview of all subscriptions and orphaned records
 
 **Response**:
+
 ```json
 {
   "timestamp": "2025-12-22T16:00:00Z",
@@ -336,8 +362,10 @@ Added three new diagnostic endpoints:
 **File**: `README.md` (lines 93-96)
 
 **Removed**:
+
 ```markdown
 ## DELETE Later
+
 Stripe publishable key = pk_test_51RwCz2...
 Stripe Secret key = Secret key
 ```
@@ -387,23 +415,28 @@ Stripe Secret key = Secret key
 **File**: `src/subscription/webhook.controller.ts`
 
 1. **`checkout.session.completed`** (lines 995-1044)
+
    - Fired when user completes checkout
    - Creates initial subscription record
    - Stores: subscription ID, customer ID, plan, billing period
 
 2. **`customer.subscription.created`** (lines 1046-1067)
+
    - Fired when subscription is created
    - Syncs subscription data
 
 3. **`customer.subscription.updated`** (lines 1069-1086)
+
    - Fired when subscription changes (plan, billing period)
    - Updates database record
 
 4. **`customer.subscription.deleted`** (lines 1088-1099)
+
    - Fired when subscription is canceled
    - Sets status to 'canceled', records canceledAt timestamp
 
 5. **`invoice.payment_succeeded`** (lines 1101-1124)
+
    - Fired when payment succeeds (monthly renewal)
    - Updates status to 'active', updates billing period
 
@@ -415,19 +448,19 @@ Stripe Secret key = Secret key
 
 **Table**: `user_subscriptions`
 
-| Column | Type | Purpose |
-|--------|------|---------|
-| `id` | int | Primary key |
-| `user_id` | int | Foreign key to users |
-| `stripe_subscription_id` | varchar(255) | Stripe subscription ID |
-| `stripe_customer_id` | varchar(255) | Stripe customer ID |
-| `plan_lookup_key` | varchar(100) | Plan identifier |
-| `status` | varchar(50) | active/canceled/past_due |
-| `current_period_start` | timestamp | Billing period start |
-| `current_period_end` | timestamp | Billing period end |
-| `canceled_at` | timestamp | Cancellation timestamp |
-| `created_at` | timestamp | Record creation |
-| `updated_at` | timestamp | Last update |
+| Column                   | Type         | Purpose                  |
+| ------------------------ | ------------ | ------------------------ |
+| `id`                     | int          | Primary key              |
+| `user_id`                | int          | Foreign key to users     |
+| `stripe_subscription_id` | varchar(255) | Stripe subscription ID   |
+| `stripe_customer_id`     | varchar(255) | Stripe customer ID       |
+| `plan_lookup_key`        | varchar(100) | Plan identifier          |
+| `status`                 | varchar(50)  | active/canceled/past_due |
+| `current_period_start`   | timestamp    | Billing period start     |
+| `current_period_end`     | timestamp    | Billing period end       |
+| `canceled_at`            | timestamp    | Cancellation timestamp   |
+| `created_at`             | timestamp    | Record creation          |
+| `updated_at`             | timestamp    | Last update              |
 
 ---
 
@@ -436,6 +469,7 @@ Stripe Secret key = Secret key
 ### For Local Development
 
 1. **Always use Stripe CLI for webhook forwarding**:
+
    ```bash
    stripe listen --forward-to localhost:3000/api/webhooks/stripe
    ```
@@ -445,6 +479,7 @@ Stripe Secret key = Secret key
 3. **Restart the application** after changing environment variables
 
 4. **Test webhook processing**:
+
    ```bash
    stripe trigger checkout.session.completed
    stripe trigger customer.subscription.updated
@@ -455,13 +490,16 @@ Stripe Secret key = Secret key
 ### For Production Deployment
 
 1. **Configure webhook endpoint in Stripe Dashboard**:
+
    - URL: `https://your-backend-domain.com/api/webhooks/stripe`
    - Events: `checkout.session.completed`, `customer.subscription.*`, `invoice.payment_*`
 
 2. **Set environment variable**:
+
    ```bash
    STRIPE_WEBHOOK_SECRET=whsec_live_xxxxx
    ```
+
    (Get from Stripe Dashboard after creating endpoint)
 
 3. **Test webhook delivery** from Stripe Dashboard → Developers → Webhooks → Send test webhook
@@ -493,13 +531,13 @@ Stripe Secret key = Secret key
 
 ## Files Modified
 
-| File | Changes | Purpose |
-|------|---------|---------|
-| `.env.local` | Updated `STRIPE_WEBHOOK_SECRET` | Enable webhook verification |
-| `src/subscription/billing-subscription.service.ts` | Enhanced error logging (lines 502-514, 589-601) | Better debugging |
-| `src/debug/debug.controller.ts` | Added 3 diagnostic endpoints | Troubleshooting tools |
-| `README.md` | Removed sensitive keys | Security cleanup |
-| `user_subscriptions` table | Manual SQL update | Immediate fix |
+| File                                               | Changes                                         | Purpose                     |
+| -------------------------------------------------- | ----------------------------------------------- | --------------------------- |
+| `.env.local`                                       | Updated `STRIPE_WEBHOOK_SECRET`                 | Enable webhook verification |
+| `src/subscription/billing-subscription.service.ts` | Enhanced error logging (lines 502-514, 589-601) | Better debugging            |
+| `src/debug/debug.controller.ts`                    | Added 3 diagnostic endpoints                    | Troubleshooting tools       |
+| `README.md`                                        | Removed sensitive keys                          | Security cleanup            |
+| `user_subscriptions` table                         | Manual SQL update                               | Immediate fix               |
 
 ---
 
@@ -530,16 +568,19 @@ Stripe Secret key = Secret key
 ### How to Use Diagnostic Endpoints
 
 **Check User Subscription Status**:
+
 ```bash
 curl http://localhost:3000/debug/subscription/user/1
 ```
 
 **Manually Sync Subscription**:
+
 ```bash
 curl -X POST http://localhost:3000/debug/subscription/sync/1
 ```
 
 **View All Subscriptions**:
+
 ```bash
 curl http://localhost:3000/debug/subscription/database-state
 ```
@@ -549,6 +590,7 @@ curl http://localhost:3000/debug/subscription/database-state
 **Problem**: Subscription shows null after checkout
 
 **Steps**:
+
 1. Check webhook delivery in Stripe Dashboard
 2. Verify `STRIPE_WEBHOOK_SECRET` in environment
 3. Check application logs for webhook errors

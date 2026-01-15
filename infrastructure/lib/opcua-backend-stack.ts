@@ -14,10 +14,9 @@ export class OpcuaBackendStack extends cdk.Stack {
     super(scope, id, props);
 
     // Default to production configuration if not specified
-    const instanceType = props?.instanceType || ec2.InstanceType.of(
-      ec2.InstanceClass.T3,
-      ec2.InstanceSize.MEDIUM
-    );
+    const instanceType =
+      props?.instanceType ||
+      ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MEDIUM);
     const storageSize = props?.storageSize || 50;
     const enableElasticIP = props?.enableElasticIP ?? true;
 
@@ -45,22 +44,22 @@ export class OpcuaBackendStack extends cdk.Stack {
     securityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(80),
-      'Allow HTTP'
+      'Allow HTTP',
     );
     securityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(443),
-      'Allow HTTPS'
+      'Allow HTTPS',
     );
     securityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(3000),
-      'Allow Backend API'
+      'Allow Backend API',
     );
     securityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(1883),
-      'Allow MQTT'
+      'Allow MQTT',
     );
 
     // Restrict SSH to your IP (update this!)
@@ -68,15 +67,19 @@ export class OpcuaBackendStack extends cdk.Stack {
     securityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(22),
-      'Allow SSH - UPDATE TO YOUR IP!'
+      'Allow SSH - UPDATE TO YOUR IP!',
     );
 
     // 3. IAM Role for EC2 (for CloudWatch logs and Systems Manager)
     const role = new iam.Role(this, 'OpcuaInstanceRole', {
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
       managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchAgentServerPolicy'),
-        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'),
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          'CloudWatchAgentServerPolicy',
+        ),
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          'AmazonSSMManagedInstanceCore',
+        ),
       ],
     });
 
@@ -147,9 +150,9 @@ export class OpcuaBackendStack extends cdk.Stack {
       'INFLUXDB_TOKEN=$(openssl rand -base64 48)',
       '',
       '# Set production Stripe keys (update these with your actual keys)',
-      'STRIPE_SECRET_KEY="sk_test_51RwCz2HOHpiK2JjACjIn8UGlbSGWAYTOOqavqc9M8vB66LHft55zBiyCo8ReWCozsfDpUtgKhtaH9qSIrxT0whEw00SyRFIDhK"',
-      'STRIPE_PUBLISHABLE_KEY="pk_test_51RwCz2HOHpiK2JjAzAuGUrBU2HJU5a2GkyO2b5mRlC3vTVeKc9ZYikOaFcDOtekryJdbBOuddGFacnv96HczNHaD00NZ2WpxMp"',
-      'STRIPE_WEBHOOK_SECRET="whsec_282b3763fe4a23a46e87ef8bf4874bafc95294ee3ac654c2e43a8c50b9fffbb2"',
+      'STRIPE_SECRET_KEY="sk_test_your_key_here"',
+      'STRIPE_PUBLISHABLE_KEY="pk_test_your_key_here"',
+      'STRIPE_WEBHOOK_SECRET="whsec_your_webhook_secret"',
       '',
       '# Update .env.compose with generated secrets',
       'echo "Updating environment variables..."',
@@ -204,13 +207,13 @@ export class OpcuaBackendStack extends cdk.Stack {
       'echo "=== OPCUA Backend Setup Complete ==="',
       'echo "Timestamp: $(date)"',
       'echo "Check service status: docker-compose ps"',
-      'echo "View logs: docker-compose logs -f"'
+      'echo "View logs: docker-compose logs -f"',
     );
 
     // 5. EC2 Instance
     const instance = new ec2.Instance(this, 'OpcuaInstance', {
       vpc,
-      instanceType,  // Use parameter from props
+      instanceType, // Use parameter from props
       machineImage: ec2.MachineImage.latestAmazonLinux2023({
         cpuType: ec2.AmazonLinuxCpuType.X86_64,
       }),
@@ -219,7 +222,8 @@ export class OpcuaBackendStack extends cdk.Stack {
       blockDevices: [
         {
           deviceName: '/dev/xvda',
-          volume: ec2.BlockDeviceVolume.ebs(storageSize, {  // Use parameter from props
+          volume: ec2.BlockDeviceVolume.ebs(storageSize, {
+            // Use parameter from props
             volumeType: ec2.EbsDeviceVolumeType.GP3,
             deleteOnTermination: true,
           }),

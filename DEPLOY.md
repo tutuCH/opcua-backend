@@ -7,19 +7,22 @@ This guide covers deploying the OPC UA backend demo to AWS EC2 with a single com
 Deploy all services (PostgreSQL, InfluxDB, Redis, MQTT, NestJS) to AWS EC2 in one command:
 
 ```bash
-./scripts/deploy-demo.sh
+cp .env.compose.example .env.compose
+./deploy.sh
 ```
 
 That's it! The script will:
-- ✓ Generate secure credentials automatically
-- ✓ Create AWS infrastructure (security group, key pair)
+
+- ✓ Create/reuse AWS infrastructure (security group, key pair)
 - ✓ Launch EC2 instance with all services
+- ✓ Install Docker + Docker Compose
+- ✓ Pull the repo and start services
 - ✓ Wait for health checks
-- ✓ Output access URLs and credentials
 
 ## Prerequisites
 
 ### 1. AWS CLI
+
 ```bash
 # Install AWS CLI
 # macOS
@@ -35,6 +38,7 @@ aws configure
 ```
 
 ### 2. jq (JSON processor)
+
 ```bash
 # macOS
 brew install jq
@@ -47,6 +51,7 @@ sudo yum install jq      # RHEL/Amazon Linux
 ### 3. AWS Permissions
 
 Your AWS user/role needs these permissions:
+
 - EC2: `run-instances`, `describe-instances`, `terminate-instances`
 - EC2: `create-security-group`, `authorize-security-group-ingress`, `delete-security-group`
 - EC2: `create-key-pair`, `describe-key-pairs`, `delete-key-pair`
@@ -56,24 +61,29 @@ Your AWS user/role needs these permissions:
 ## Deployment Options
 
 ### Basic Deployment (Default Region & Instance Type)
+
 ```bash
-./scripts/deploy-demo.sh
+./deploy.sh
 ```
+
 - Region: `us-east-1`
 - Instance: `t3.small` (2 vCPU, 2 GB RAM)
 - Cost: ~$0.02/hour (~$15/month if left running)
 
 ### Custom Region
+
 ```bash
-./scripts/deploy-demo.sh us-west-2
+REGION=us-west-2 ./deploy.sh
 ```
 
 ### Custom Instance Type
+
 ```bash
-./scripts/deploy-demo.sh us-east-1 t3.medium
+INSTANCE_TYPE=t3.medium ./deploy.sh
 ```
 
 **Recommended instance types:**
+
 - `t3.small` - Minimal demo (2 vCPU, 2 GB)
 - `t3.medium` - Moderate load (2 vCPU, 4 GB) ⭐ **Recommended**
 - `t3.large` - Production testing (2 vCPU, 8 GB)
@@ -81,6 +91,7 @@ Your AWS user/role needs these permissions:
 ## What Gets Deployed
 
 ### Services
+
 1. **PostgreSQL** (port 5432) - User data, factories, machines
 2. **InfluxDB** (port 8086) - Time-series machine metrics
 3. **Redis** (port 6379) - Message queue and caching
@@ -88,21 +99,20 @@ Your AWS user/role needs these permissions:
 5. **NestJS Backend** (port 80, 3000) - REST API and WebSocket
 
 ### AWS Resources
+
 - EC2 Instance (Amazon Linux 2023)
-- Security Group (`opcua-demo-sg`)
+- Security Group (`opcua-backend-sg` by default)
   - Port 22: SSH (0.0.0.0/0)
   - Port 80: HTTP (0.0.0.0/0)
-  - Port 3000: Backend API (0.0.0.0/0)
-  - Port 1883: MQTT (0.0.0.0/0)
-  - Port 9001: MQTT WebSocket (0.0.0.0/0)
-- SSH Key Pair (`opcua-demo-key`)
+  - Add MQTT ports (1883/9001) if you need device access
+- SSH Key Pair (`opcua-backend-key` by default)
 
 ### Generated Files
+
 ```
-.deploy-demo.json          # Deployment state (instance ID, IP, etc.)
-.env.compose              # Environment with auto-generated secrets
-deployment-info.txt       # Credentials and access information
-opcua-demo-key.pem        # SSH private key (chmod 400)
+scripts/.deploy_state     # Deployment state (instance ID, IP, etc.)
+.env.compose              # Local env file (user-managed secrets)
+opcua-backend-key.pem     # SSH private key (chmod 400)
 ```
 
 ⚠️ **Keep these files secure! They contain passwords and SSH keys.**
@@ -112,6 +122,7 @@ opcua-demo-key.pem        # SSH private key (chmod 400)
 ### Access Your Backend
 
 The deployment outputs:
+
 ```
 ================================================================================
 ✓ Deployment Successful!
@@ -122,10 +133,9 @@ The deployment outputs:
 🔌 WebSocket:        ws://54.123.45.67/socket.io/
 
 🔑 SSH Access:
-   ssh -i opcua-demo-key.pem ec2-user@54.123.45.67
+   ssh -i opcua-backend-key.pem ec2-user@54.123.45.67
 
-📝 Credentials saved to: deployment-info.txt
-⚠️  Keep this file secure - it contains passwords!
+📝 State saved to: scripts/.deploy_state
 ================================================================================
 ```
 
@@ -142,7 +152,7 @@ curl http://<PUBLIC_IP>/health
 ### SSH Into Instance
 
 ```bash
-ssh -i opcua-demo-key.pem ec2-user@<PUBLIC_IP>
+ssh -i opcua-backend-key.pem ec2-user@<PUBLIC_IP>
 
 # Once connected, view services:
 cd /opt/app/src
@@ -161,11 +171,13 @@ sudo docker compose logs -f mosquitto
 Your injection machines should connect to the MQTT broker:
 
 **MQTT Broker:**
+
 - Host: `<PUBLIC_IP>`
 - Port: `1883` (TCP) or `9001` (WebSocket)
 - Authentication: Anonymous (demo mode)
 
 **Topic Pattern:**
+
 ```
 factory/{factoryId}/machine/{deviceId}/realtime
 factory/{factoryId}/machine/{deviceId}/spc
@@ -173,6 +185,7 @@ factory/{factoryId}/machine/{deviceId}/tech
 ```
 
 **Example (using mosquitto_pub):**
+
 ```bash
 mosquitto_pub -h <PUBLIC_IP> -p 1883 \
   -t "factory/1/machine/device-001/realtime" \
@@ -182,13 +195,15 @@ mosquitto_pub -h <PUBLIC_IP> -p 1883 \
 ## Managing the Deployment
 
 ### View Service Status
+
 ```bash
-ssh -i opcua-demo-key.pem ec2-user@<PUBLIC_IP>
+ssh -i opcua-backend-key.pem ec2-user@<PUBLIC_IP>
 cd /opt/app/src
 sudo docker compose ps
 ```
 
 ### Restart Services
+
 ```bash
 # Restart all services
 sudo docker compose restart
@@ -199,6 +214,7 @@ sudo docker compose restart postgres
 ```
 
 ### View Logs
+
 ```bash
 # All services
 sudo docker compose logs -f
@@ -211,8 +227,9 @@ sudo docker compose logs --tail 100 backend
 ```
 
 ### Update Backend Code
+
 ```bash
-ssh -i opcua-demo-key.pem ec2-user@<PUBLIC_IP>
+ssh -i opcua-backend-key.pem ec2-user@<PUBLIC_IP>
 cd /opt/app/src
 
 # Pull latest code
@@ -228,10 +245,11 @@ sudo docker compose up -d backend
 Remove all AWS resources:
 
 ```bash
-./scripts/teardown-demo.sh
+./scripts/teardown.sh
 ```
 
 This will:
+
 - Terminate the EC2 instance
 - Delete the security group
 - Delete the SSH key pair
@@ -246,14 +264,17 @@ This will:
 **Symptoms:** Script times out after 5 minutes
 
 **Solutions:**
+
 1. SSH into instance and check logs:
+
    ```bash
-   ssh -i opcua-demo-key.pem ec2-user@<PUBLIC_IP>
+   ssh -i opcua-backend-key.pem ec2-user@<PUBLIC_IP>
    sudo tail -f /var/log/user-data.log
    cd /opt/app/src && sudo docker compose logs
    ```
 
 2. Check Docker status:
+
    ```bash
    sudo systemctl status docker
    sudo docker ps -a
@@ -267,13 +288,15 @@ This will:
 ### Services Won't Start
 
 **Check Docker Compose logs:**
+
 ```bash
-ssh -i opcua-demo-key.pem ec2-user@<PUBLIC_IP>
+ssh -i opcua-backend-key.pem ec2-user@<PUBLIC_IP>
 cd /opt/app/src
 sudo docker compose logs backend
 ```
 
 **Common issues:**
+
 - Database connection failed → Check PostgreSQL logs: `sudo docker compose logs postgres`
 - Redis connection failed → Check Redis logs: `sudo docker compose logs redis`
 - InfluxDB not ready → Check InfluxDB logs: `sudo docker compose logs influxdb`
@@ -281,6 +304,7 @@ sudo docker compose logs backend
 ### Can't SSH to Instance
 
 **Verify security group allows SSH:**
+
 ```bash
 aws ec2 describe-security-groups \
   --group-names opcua-demo-sg \
@@ -288,13 +312,15 @@ aws ec2 describe-security-groups \
 ```
 
 **Check key permissions:**
+
 ```bash
-chmod 400 opcua-demo-key.pem
+chmod 400 opcua-backend-key.pem
 ```
 
 ### Port 1883 (MQTT) Not Accessible
 
 **Verify security group rules:**
+
 ```bash
 # Add MQTT port manually if needed
 aws ec2 authorize-security-group-ingress \
@@ -307,12 +333,14 @@ aws ec2 authorize-security-group-ingress \
 ### Out of Disk Space
 
 **Check disk usage:**
+
 ```bash
-ssh -i opcua-demo-key.pem ec2-user@<PUBLIC_IP>
+ssh -i opcua-backend-key.pem ec2-user@<PUBLIC_IP>
 df -h
 ```
 
 **Clean Docker resources:**
+
 ```bash
 sudo docker system prune -a
 ```
@@ -323,11 +351,11 @@ If you see "A deployment may already exist":
 
 ```bash
 # Option 1: Teardown existing deployment
-./scripts/teardown-demo.sh
+./scripts/teardown.sh
 
 # Option 2: Force new deployment (risky)
-rm -f .deploy-demo.json
-./scripts/deploy-demo.sh
+rm -f scripts/.deploy_state
+./deploy.sh
 ```
 
 ## Security Considerations
@@ -344,6 +372,7 @@ This deployment is optimized for **demo/testing purposes only**. Security consid
 ### Production Hardening (Future)
 
 For production use, consider:
+
 - [ ] Use AWS Secrets Manager for credentials
 - [ ] Add SSL/TLS certificates (Let's Encrypt)
 - [ ] Restrict security group to specific IPs
@@ -356,15 +385,18 @@ For production use, consider:
 ## Cost Estimation
 
 **EC2 Instance (t3.small, us-east-1):**
+
 - Hourly: $0.0208
 - Daily: ~$0.50
 - Monthly: ~$15.00
 
 **Data Transfer:**
+
 - First 100 GB/month: Free
 - Additional: $0.09/GB
 
 **Storage (EBS gp3):**
+
 - Included in instance (20 GB root volume)
 
 **Total estimated cost:** ~$15-20/month for continuous operation
@@ -376,23 +408,26 @@ For production use, consider:
 ### Custom Environment Variables
 
 Edit `.env.compose.template` before deploying to customize:
+
 - `FRONTEND_URL` - Your frontend application URL
 - `ENABLE_MOCK_DATA` - Enable/disable mock data generation
 - AWS integration settings (Cognito, Timestream, etc.)
 
 Then re-run:
+
 ```bash
-./scripts/deploy-demo.sh
+./deploy.sh
 ```
 
 ### Attach Custom Domain
 
 After deployment, you can:
+
 1. Create Route53 hosted zone
 2. Add A record pointing to EC2 public IP
 3. Use Certbot for SSL:
    ```bash
-   ssh -i opcua-demo-key.pem ec2-user@<PUBLIC_IP>
+   ssh -i opcua-backend-key.pem ec2-user@<PUBLIC_IP>
    sudo dnf install certbot
    sudo certbot certonly --standalone -d your-domain.com
    ```
@@ -400,6 +435,7 @@ After deployment, you can:
 ## Support
 
 For issues or questions:
+
 1. Check logs: `sudo docker compose logs`
 2. Review this guide's troubleshooting section
 3. Check main README.md for architecture details
