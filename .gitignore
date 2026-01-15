@@ -44,6 +44,8 @@ lerna-debug.log*
 .env.compose
 .env.ec2
 
+backend.env
+
 # temp directory
 .temp
 .tmp

@@ -92,9 +92,12 @@ Frontend Clients
 
 The system uses the following MQTT topic structure:
 
-- `{deviceId}/realtime` - Machine status & temperatures (every 5s)
-- `{deviceId}/spc` - Cycle data & process parameters (per cycle)  
-- `{deviceId}/tech` - Setup parameters & recipes (on job change)
+- `<prefix>/{deviceId}/realtime` - Machine status & temperatures (every 5s)
+- `<prefix>/{deviceId}/spc` - Cycle data & process parameters (per cycle)
+- `<prefix>/{deviceId}/tech` - Setup parameters & recipes (on job change)
+
+By default, the mock generator uses the prefix `/YLCY/IMM`. Set
+`MQTT_TOPIC_PREFIX` to override (use an empty value for no prefix).
 
 ## 🔧 Configuration
 
@@ -125,6 +128,7 @@ REDIS_PASSWORD=password
 ENABLE_MOCK_DATA=true
 MOCK_MACHINES_COUNT=3
 MOCK_DATA_INTERVAL=5000
+MQTT_TOPIC_PREFIX=/YLCY/IMM
 ```
 
 ### Machine Setup

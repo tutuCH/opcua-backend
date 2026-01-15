@@ -23,6 +23,6 @@ export const JwtUserId = createParamDecorator(
     }
 
     const decodedToken = decodeJwtToken(authHeader);
-    return decodedToken.sub; // Return the userId from the JWT token
+    return parseInt(decodedToken.sub, 10); // Return the userId from the JWT token as number
   },
 );

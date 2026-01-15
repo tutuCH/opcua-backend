@@ -12,4 +12,9 @@ export const frontendUrl = process.env.FRONTEND_URL;
 
 export const emailAddress = process.env.EMAIL_ADDRESS;
 
-export const emailPassword = process.env.EMAIL_PASSWORD;
+export const emailPassword = (
+  process.env.EMAIL_PASSWORD ?? process.env.EMAIL_APP_PASSWORD
+)?.replace(/\s+/g, '');
+
+export const emailSendEnabled =
+  process.env.EMAIL_SEND_ENABLED?.toLowerCase() !== 'false';

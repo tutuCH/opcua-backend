@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { User } from '../user/entities/user.entity';
 import { UserSubscription } from './entities/user-subscription.entity';
+import { WebhookEvent } from './entities/webhook-event.entity';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import { CreatePortalSessionDto } from './dto/create-portal-session.dto';
 
@@ -25,6 +26,8 @@ export class BillingSubscriptionService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(UserSubscription)
     private readonly subscriptionRepository: Repository<UserSubscription>,
+    @InjectRepository(WebhookEvent)
+    private readonly webhookEventRepository: Repository<WebhookEvent>,
     private readonly configService: ConfigService,
   ) {
     this.isProduction =
@@ -411,7 +414,7 @@ export class BillingSubscriptionService {
         const product = price?.product as Stripe.Product;
 
         const firstItem = stripeSubscription.items.data[0];
-        console.log('🔍 Stripe subscription periods:', {
+        this.logger.debug('Stripe subscription periods:', {
           current_period_start: firstItem?.current_period_start,
           current_period_end: firstItem?.current_period_end,
           start_date: firstItem
@@ -956,10 +959,33 @@ export class BillingSubscriptionService {
   }
 
   async handleWebhookEvent(event: Stripe.Event) {
+    const eventId = event.id;
+
+    // Check if event was already processed (idempotency)
+    const existingEvent = await this.webhookEventRepository.findOne({
+      where: { eventId },
+    });
+
+    if (existingEvent) {
+      this.logger.log(`Event ${eventId} already processed, skipping`);
+      return;
+    }
+
+    // Store event before processing
+    await this.webhookEventRepository.save({
+      eventId,
+      eventType: event.type,
+      processed: false,
+    });
+
     this.logger.log(`Processing webhook event: ${event.type} - ${event.id}`);
 
     if (!this.stripe) {
       this.logger.warn('Stripe not configured - ignoring webhook event');
+      await this.webhookEventRepository.update(
+        { eventId },
+        { processed: true },
+      );
       return;
     }
 
@@ -1004,7 +1030,18 @@ export class BillingSubscriptionService {
         default:
           this.logger.log(`Unhandled event type: ${event.type}`);
       }
+
+      // Mark event as successfully processed
+      await this.webhookEventRepository.update(
+        { eventId },
+        { processed: true },
+      );
     } catch (error) {
+      // Mark event as failed
+      await this.webhookEventRepository.update(
+        { eventId },
+        { processed: false, error: error.message },
+      );
       this.logger.error('Error processing webhook event:', error);
       throw error;
     }
@@ -1013,27 +1050,27 @@ export class BillingSubscriptionService {
   private async handleCheckoutSessionCompleted(
     session: Stripe.Checkout.Session,
   ) {
-    this.logger.log('🎉 Checkout session completed:', session.id);
-    console.log('🎉 Checkout session completed:', session.id);
+    this.logger.log(`Checkout session completed: ${session.id}`);
 
     const userId = session.metadata?.user_id;
     const lookupKey = session.metadata?.lookup_key;
 
-    console.log('📋 Session metadata:', { userId, lookupKey });
+    this.logger.debug(
+      `Session metadata: ${JSON.stringify({ userId, lookupKey })}`,
+    );
 
     if (!userId) {
-      this.logger.error('❌ No user_id in session metadata');
-      console.error('❌ No user_id in session metadata');
+      this.logger.error('No user_id in session metadata');
       return;
     }
 
     if (session.subscription) {
-      console.log('🔄 Retrieving subscription:', session.subscription);
+      this.logger.debug(`Retrieving subscription: ${session.subscription}`);
       const subscription = await this.stripe.subscriptions.retrieve(
         session.subscription as string,
       );
 
-      console.log('💾 Updating user subscription for user:', userId);
+      this.logger.debug(`Updating user subscription for user: ${userId}`);
       const firstItem = subscription.items.data[0];
       const updatedSubscription = await this.updateUserSubscription(
         Number(userId),
@@ -1051,13 +1088,15 @@ export class BillingSubscriptionService {
         },
       );
 
-      console.log('✅ Subscription saved to database:', updatedSubscription);
+      this.logger.debug(
+        `Subscription saved to database: ${updatedSubscription.planLookupKey}`,
+      );
 
       this.logger.log(
         `Subscription ${subscription.id} activated for user ${userId}`,
       );
     } else {
-      console.log('⚠️ No subscription found in session');
+      this.logger.warn('No subscription found in session');
     }
   }
 

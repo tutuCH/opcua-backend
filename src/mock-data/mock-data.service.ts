@@ -237,7 +237,10 @@ export class MockDataService implements OnModuleInit {
       },
     };
 
-    this.publishMqttMessage(`${deviceId}/realtime`, realtimeData);
+    this.publishMqttMessage(
+      this.buildMqttTopic(deviceId, 'realtime'),
+      realtimeData,
+    );
     this.logger.debug(`Generated realtime data for ${deviceId}`);
   }
 
@@ -311,7 +314,7 @@ export class MockDataService implements OnModuleInit {
       },
     };
 
-    this.publishMqttMessage(`${deviceId}/spc`, spcData);
+    this.publishMqttMessage(this.buildMqttTopic(deviceId, 'spc'), spcData);
     this.logger.debug(
       `Generated SPC data for ${deviceId}, cycle ${state.cycleNumber}`,
     );
@@ -409,43 +412,43 @@ export class MockDataService implements OnModuleInit {
       },
     };
 
-    this.publishMqttMessage(`${deviceId}/tech`, techData);
+    this.publishMqttMessage(this.buildMqttTopic(deviceId, 'tech'), techData);
     this.logger.log(`Generated tech configuration for ${deviceId}`);
   }
 
   private publishMqttMessage(topic: string, data: any) {
-    // Unmarshall DynamoDB format to plain JSON before publishing
-    const plainData = this.unmarshallMessage(data);
-
     if (this.mqttClient && this.mqttClient.connected) {
-      this.mqttClient.publish(topic, JSON.stringify(plainData), (error) => {
+      this.mqttClient.publish(topic, JSON.stringify(data), (error) => {
         if (error) {
           this.logger.error(`Failed to publish to topic ${topic}:`, error);
         }
       });
     } else {
       // MQTT not connected, inject directly into Redis
-      this.injectDataToRedis(plainData);
+      this.injectDataToRedis(data);
     }
   }
 
   private async injectDataToRedis(data: any) {
     try {
-      const queueName =
-        data.topic === 'realtime'
-          ? 'mqtt:realtime'
-          : data.topic === 'spc'
-            ? 'mqtt:spc'
-            : 'mqtt:tech';
+      const topicType = this.unmarshallDynamoDBData(data?.topic);
+      const deviceId = this.unmarshallDynamoDBData(data?.devId);
+
+      if (!topicType || !deviceId) {
+        this.logger.warn('Mock data injection skipped: missing topic or devId');
+        return;
+      }
+
+      const queueName = this.getQueueNameForTopicType(topicType);
 
       const message = {
-        topic: `factory/1/machine/${data.devId}/${data.topic}`,
+        topic: this.buildMqttTopic(deviceId, topicType),
         payload: data,
         qos: 0,
         retain: false,
       };
 
-      await this.redisService.enqueueMQTTMessage(queueName, message);
+      await this.redisService.enqueueMessage(queueName, message);
 
       this.logger.debug(
         `🔄 Injected ${data.topic} data for ${data.devId} directly to Redis queue ${queueName}`,
@@ -453,6 +456,25 @@ export class MockDataService implements OnModuleInit {
     } catch (error) {
       this.logger.error('Failed to inject data to Redis:', error);
     }
+  }
+
+  private getTopicPrefix(): string {
+    const rawPrefix = process.env.MQTT_TOPIC_PREFIX ?? '/YLCY/IMM';
+    const trimmed = rawPrefix.trim();
+    if (!trimmed) return '';
+    return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+  }
+
+  private buildMqttTopic(deviceId: string, topicType: string): string {
+    const prefix = this.getTopicPrefix();
+    if (!prefix) {
+      return `${deviceId}/${topicType}`;
+    }
+    return `${prefix}/${deviceId}/${topicType}`;
+  }
+
+  private getQueueNameForTopicType(topicType: string): string {
+    return `mqtt:${topicType}`;
   }
 
   private randomFloat(min: number, max: number): number {
@@ -468,6 +490,7 @@ export class MockDataService implements OnModuleInit {
    * This matches what AWS sends and transforms it to what the backend expects
    */
   private unmarshallDynamoDBData(data: any): any {
+    if (data === null || data === undefined) return data;
     if (data.S !== undefined) return data.S;
     if (data.N !== undefined) return parseFloat(data.N);
     if (data.M !== undefined) {
@@ -481,17 +504,6 @@ export class MockDataService implements OnModuleInit {
       return data.L.map((item) => this.unmarshallDynamoDBData(item));
     }
     return data;
-  }
-
-  /**
-   * Unmarshall complete message from DynamoDB format to plain JSON
-   */
-  private unmarshallMessage(dynamoDBMessage: any): any {
-    const plainMessage: any = {};
-    for (const key in dynamoDBMessage) {
-      plainMessage[key] = this.unmarshallDynamoDBData(dynamoDBMessage[key]);
-    }
-    return plainMessage;
   }
 
   // Control methods

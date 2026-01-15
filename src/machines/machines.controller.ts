@@ -91,18 +91,62 @@ export class MachinesController {
         throw new HttpException('Machine not found', HttpStatus.NOT_FOUND);
       }
 
-      // Use existing InfluxDB service directly for simplicity
-      const data = await this.influxDbService.queryRealtimeData(
-        machine.machineName,
-        timeRange || '-1h',
-      );
+      // Handle aggregation requests
+      if (aggregate && aggregate !== 'none') {
+        const windowSize = this.parseAggregateWindow(aggregate);
+
+        const data = await this.influxDbService.queryRealtimeDataAggregated(
+          machine.machineName,
+          timeRange || '-1h',
+          windowSize,
+        );
+
+        return {
+          data,
+          aggregation: {
+            enabled: true,
+            window: windowSize,
+          },
+          metadata: {
+            deviceId: machine.machineName,
+            timeRange: timeRange || '-1h',
+          },
+        };
+      }
+
+      // Default: Paginated query
+      const pageSize = parseInt(limit) || 50;
+      const pageOffset = parseInt(offset) || 0;
+
+      // Validate limit
+      if (pageSize > 1000) {
+        throw new HttpException(
+          'Limit cannot exceed 1000 records',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Fetch paginated data and total count in parallel
+      const [data, total] = await Promise.all([
+        this.influxDbService.queryRealtimeDataPaginated(
+          machine.machineName,
+          timeRange || '-1h',
+          pageSize,
+          pageOffset,
+        ),
+        this.influxDbService.getRealtimeDataCount(
+          machine.machineName,
+          timeRange || '-1h',
+        ),
+      ]);
 
       return {
         data,
         pagination: {
-          total: data.length,
-          limit: limit ? parseInt(limit) : 1000,
-          offset: offset ? parseInt(offset) : 0,
+          total,
+          limit: pageSize,
+          offset: pageOffset,
+          hasMore: pageOffset + data.length < total,
         },
         metadata: {
           deviceId: machine.machineName,
@@ -119,6 +163,21 @@ export class MachinesController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  private parseAggregateWindow(aggregate: string): string {
+    // Parse aggregation window from format like "1m", "5m", "15m", "1h"
+    const validWindows = ['1m', '5m', '15m', '30m', '1h', '6h', '1d'];
+    const window = validWindows.find((w) => aggregate.includes(w));
+
+    if (!window) {
+      throw new HttpException(
+        `Invalid aggregate window. Valid options: ${validWindows.join(', ')}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return window;
   }
 
   @Get(':id/spc-history')
@@ -139,18 +198,62 @@ export class MachinesController {
         throw new HttpException('Machine not found', HttpStatus.NOT_FOUND);
       }
 
-      // Use existing InfluxDB service directly for simplicity
-      const data = await this.influxDbService.querySPCData(
-        machine.machineName,
-        timeRange || '-1h',
-      );
+      // Handle aggregation requests
+      if (aggregate && aggregate !== 'none') {
+        const windowSize = this.parseAggregateWindow(aggregate);
+
+        const data = await this.influxDbService.querySPCDataAggregated(
+          machine.machineName,
+          timeRange || '-1h',
+          windowSize,
+        );
+
+        return {
+          data,
+          aggregation: {
+            enabled: true,
+            window: windowSize,
+          },
+          metadata: {
+            deviceId: machine.machineName,
+            timeRange: timeRange || '-1h',
+          },
+        };
+      }
+
+      // Default: Paginated query
+      const pageSize = parseInt(limit) || 50;
+      const pageOffset = parseInt(offset) || 0;
+
+      // Validate limit
+      if (pageSize > 1000) {
+        throw new HttpException(
+          'Limit cannot exceed 1000 records',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // Fetch paginated data and total count in parallel
+      const [data, total] = await Promise.all([
+        this.influxDbService.querySPCDataPaginated(
+          machine.machineName,
+          timeRange || '-1h',
+          pageSize,
+          pageOffset,
+        ),
+        this.influxDbService.getSPCDataCount(
+          machine.machineName,
+          timeRange || '-1h',
+        ),
+      ]);
 
       return {
         data,
         pagination: {
-          total: data.length,
-          limit: limit ? parseInt(limit) : 1000,
-          offset: offset ? parseInt(offset) : 0,
+          total,
+          limit: pageSize,
+          offset: pageOffset,
+          hasMore: pageOffset + data.length < total,
         },
         metadata: {
           deviceId: machine.machineName,

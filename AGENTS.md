@@ -42,3 +42,18 @@
 - Configuration via `@nestjs/config` loads from `.env.local`, `.env`, and `.env.{NODE_ENV}` (see `src/config/`).
 - Do not commit secrets. Provide placeholders in examples and document required keys (e.g., `POSTGRES_*`, `INFLUXDB_*`, `REDIS_*`, `MQTT_*`, `JWT_SECRET`, `COGNITO_*`, `AWS_*`, `STRIPE_*`).
 - For local demo, use `npm run demo:dev` to start dockerized deps, then `npm run start:dev`.
+
+## Planning Mode
+Use $plan prefix for read-only planning. Output structured plan ONLY:
+## Overview
+## Files Affected
+## Steps
+## Risks
+
+Example: $plan Add JWT auth → Generate plan.md excerpt.
+
+After planning, confirm "PLAN APPROVED" before exec.
+
+## Workflow
+1. If task has $plan: Plan only.
+2. Else: Plan → Confirm → Execute.

@@ -460,8 +460,7 @@ export class DebugController {
                 canceledAt: sub.canceled_at
                   ? new Date(sub.canceled_at * 1000).toISOString()
                   : null,
-                planId:
-                  firstItem?.price?.lookup_key || firstItem?.price?.id,
+                planId: firstItem?.price?.lookup_key || firstItem?.price?.id,
               };
             },
           );
@@ -638,8 +637,7 @@ export class DebugController {
 
       // Detect orphaned records
       const orphanedUsers = usersWithStripe.filter(
-        (user) =>
-          !allSubscriptions.some((sub) => sub.userId === user.userId),
+        (user) => !allSubscriptions.some((sub) => sub.userId === user.userId),
       );
 
       results.orphanedUsers = orphanedUsers.map((user) => ({

@@ -1,6 +1,7 @@
 export interface JwtPayload {
-  sub: number; // userId
-  username: string;
-  iat: number;
-  exp: number;
+  sub: string; // userId as string per frontend spec
+  email: string;
+  role: string; // accessLevel mapped to role for frontend
+  iat?: number;
+  exp?: number;
 }

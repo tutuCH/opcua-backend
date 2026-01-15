@@ -1,4 +1,5 @@
-import { IsString, IsEmail, IsNotEmpty } from 'class-validator';
+import { IsString, IsEmail, IsNotEmpty, IsEnum } from 'class-validator';
+import { UserStatus } from '../entities/user.entity';
 
 export class CreateUserDto {
   @IsString()
@@ -16,4 +17,8 @@ export class CreateUserDto {
   @IsString()
   // @IsNotEmpty()
   accessLevel: string;
+
+  @IsEnum(['active', 'pending_verification', 'inactive'])
+  // @IsNotEmpty()
+  status: UserStatus;
 }

@@ -46,6 +46,10 @@ export interface SPCData {
     ESIPS?: string;
     EIPT?: string;
     EIPSE?: string;
+    EFCHT?: string;
+    EIPSMIN?: string;
+    EOT?: string;
+    EMOS?: string;
     EPLST?: string;
     EPLSSE?: string;
     EPLSPM?: string;
@@ -59,6 +63,18 @@ export interface SPCData {
     ET8?: string;
     ET9?: string;
     ET10?: string;
+  };
+}
+
+export interface WarningData {
+  devId: string;
+  topic: string; // 'wm'
+  time: string;
+  timestamp: number;
+  Data: {
+    wmId: number | string;
+    wmMsg: string;
+    wmTime: string;
   };
 }
 
@@ -186,6 +202,23 @@ export class InfluxDBService implements OnModuleInit {
       if (data.Data.ET10)
         point.floatField('temp_10', parseFloat(data.Data.ET10));
 
+      // Add additional SPC metrics
+      if (data.Data.EIPSE)
+        point.floatField('injection_pressure_set', parseFloat(data.Data.EIPSE));
+      if (data.Data.EFCHT)
+        point.floatField('fill_cooling_time', parseFloat(data.Data.EFCHT));
+      if (data.Data.EIPSMIN)
+        point.floatField(
+          'injection_pressure_set_min',
+          parseFloat(data.Data.EIPSMIN),
+        );
+      if (data.Data.EOT)
+        point.floatField('oil_temperature_cycle', parseFloat(data.Data.EOT));
+      if (data.Data.EMOS)
+        point.floatField('end_mold_open_speed', parseFloat(data.Data.EMOS));
+      if (data.Data.EISS)
+        point.floatField('injection_start_speed', parseFloat(data.Data.EISS));
+
       this.writeApi.writePoint(point);
       this.logger.debug(
         `Wrote SPC data for device ${data.devId}, cycle ${data.Data.CYCN}`,
@@ -195,6 +228,40 @@ export class InfluxDBService implements OnModuleInit {
         `Failed to write SPC data for device ${data.devId}`,
         error,
       );
+      throw error;
+    }
+  }
+
+  async writeWarningData(data: WarningData): Promise<void> {
+    try {
+      // Validate timestamp age (1 hour retention policy)
+      const dataTime = new Date(data.timestamp);
+      const now = new Date();
+      const ageMs = now.getTime() - dataTime.getTime();
+      const ageMinutes = ageMs / 60000;
+
+      if (ageMinutes > 60) {
+        this.logger.warn(
+          `⚠️ Warning message is too old (${ageMinutes.toFixed(2)} minutes), skipping InfluxDB write to respect retention policy`,
+        );
+        return;
+      }
+
+      const dataTimeISO = new Date(data.timestamp).toISOString();
+
+      const point = new Point('alarms')
+        .tag('device_id', data.devId)
+        .tag('topic', data.topic)
+        .tag('alarm_id', data.Data.wmId.toString())
+        .stringField('alarm_message', data.Data.wmMsg)
+        .timestamp(dataTimeISO);
+
+      this.writeApi.writePoint(point);
+      this.logger.debug(
+        `Wrote alarm data for device ${data.devId}, alarm ${data.Data.wmId}: ${data.Data.wmMsg}`,
+      );
+    } catch (error) {
+      this.logger.error('Failed to write warning data to InfluxDB:', error);
       throw error;
     }
   }

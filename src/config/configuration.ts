@@ -8,6 +8,7 @@ export const databaseConfig = registerAs('database', () => ({
     username: process.env.POSTGRES_USER || 'postgres',
     password: process.env.POSTGRES_PASSWORD || 'password',
     database: process.env.POSTGRES_DB || 'opcua_dashboard',
+    synchronize: process.env.POSTGRES_SYNCHRONIZE === 'true',
   },
 
   // InfluxDB Configuration
@@ -58,6 +59,11 @@ export const authConfig = registerAs('auth', () => ({
       process.env.COGNITO_CALLBACK_URL ||
       'http://localhost:3000/auth/cognito/callback',
     issuerUrl: process.env.COGNITO_ISSUER_URL || null,
+  },
+
+  // Google OAuth 2.0
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || null,
   },
 }));
 

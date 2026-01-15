@@ -3,12 +3,15 @@ import {
   Column,
   PrimaryGeneratedColumn,
   CreateDateColumn,
+  UpdateDateColumn,
   OneToMany,
   OneToOne,
 } from 'typeorm';
 import { Machine } from './../../machines/entities/machine.entity';
 import { Factory } from '../../factories/entities/factory.entity';
 import { UserSubscription } from '../../subscription/entities/user-subscription.entity';
+
+export type UserStatus = 'active' | 'pending_verification' | 'inactive';
 
 @Entity()
 export class User {
@@ -35,8 +38,18 @@ export class User {
   })
   stripeCustomerId: string;
 
+  @Column({
+    type: 'enum',
+    enum: ['active', 'pending_verification', 'inactive'],
+    default: 'pending_verification',
+  })
+  status: UserStatus;
+
   @CreateDateColumn()
   createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 
   @OneToMany(() => Machine, (machine) => machine.user)
   machines: Machine[];

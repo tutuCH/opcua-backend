@@ -6,17 +6,26 @@ import {
   HttpStatus,
   Param,
   Post,
+  Put,
   Query,
   Request,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { GoogleAuthService } from './google-auth.service';
 import { Public } from './decorators/public.decorator';
 import { SignInDto } from './dto/signin.dto';
 import { SignUpDto } from './dto/signup.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { GoogleAuthDto } from './dto/google-auth.dto';
+import { JwtUserId } from './decorators/jwt-user-id.decorator';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private googleAuthService: GoogleAuthService,
+  ) {}
 
   // Public route for user login
   @Public()
@@ -29,8 +38,8 @@ export class AuthController {
   @Public()
   @Post('sign-up')
   async signUp(@Body() signUpDto: SignUpDto) {
-    const { email, password, username } = signUpDto;
-    return this.authService.signUp(email, password, username);
+    const { email, password, username, role } = signUpDto;
+    return this.authService.signUp(email, password, username, role);
   }
 
   @Public()
@@ -45,18 +54,43 @@ export class AuthController {
     return req.user;
   }
 
+  // Protected route for updating user profile
+  @Put('profile')
+  updateProfile(
+    @JwtUserId() userId: number,
+    @Body() updateProfileDto: UpdateProfileDto,
+  ) {
+    return this.authService.updateProfile(userId, updateProfileDto);
+  }
+
+  // Protected route for changing password
+  @Put('change-password')
+  changePassword(
+    @JwtUserId() userId: number,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(
+      userId,
+      changePasswordDto.currentPassword,
+      changePasswordDto.newPassword,
+    );
+  }
+
   @Public()
-  @Post('forget-password')
+  @Post('google')
+  async googleSignIn(@Body() googleAuthDto: GoogleAuthDto) {
+    return this.googleAuthService.authenticateWithGoogle(googleAuthDto.idToken);
+  }
+
+  @Public()
+  @Post('forgot-password')
   async forgotPassword(@Body('email') email: string) {
     return this.authService.sendPasswordResetEmail(email);
   }
 
   @Public()
-  @Post('reset-password/:token')
-  async resetPassword(
-    @Param('token') token: string,
-    @Body('password') newPassword: string,
-  ) {
-    return this.authService.resetPassword(token, newPassword);
+  @Post('reset-password')
+  async resetPassword(@Body() body: { token: string; password: string }) {
+    return this.authService.resetPassword(body.token, body.password);
   }
 }

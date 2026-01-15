@@ -7,6 +7,7 @@ import {
   InfluxDBService,
   RealtimeData,
   SPCData,
+  WarningData,
 } from '../influxdb/influxdb.service';
 import { MachineGateway } from '../websocket/machine.gateway';
 import { Machine } from '../machines/entities/machine.entity';
@@ -106,11 +107,7 @@ export class MqttProcessorService implements OnModuleInit {
   }
 
   private subscribeToTopics() {
-    const topics = [
-      '+/realtime', // Subscribe to all devices' realtime data
-      '+/spc', // Subscribe to all devices' SPC data
-      '+/tech', // Subscribe to all devices' tech data
-    ];
+    const topics = ['#']; // Allow prefixed topics (e.g., /YLCY/IMM/<id>/realtime)
 
     topics.forEach((topic) => {
       this.mqttClient.subscribe(topic, (error) => {
@@ -127,7 +124,42 @@ export class MqttProcessorService implements OnModuleInit {
     try {
       this.logger.debug(`📨 Received MQTT message on topic: ${topic}`);
 
-      const message = JSON.parse(payload.toString());
+      const rawMessage = JSON.parse(payload.toString());
+      const message = this.normalizeMessage(rawMessage);
+      const topicType = this.getTopicType(topic, message);
+
+      if (!topicType || !this.isSupportedTopicType(topicType)) {
+        this.logger.debug(
+          `Ignoring unsupported MQTT topic type "${topicType ?? 'unknown'}"`,
+        );
+        return;
+      }
+
+      if (!message.topic || typeof message.topic !== 'string') {
+        message.topic = topicType;
+      }
+
+      if (!message.devId || typeof message.devId !== 'string') {
+        const deviceId = this.getDeviceIdFromTopic(topic);
+        if (deviceId) {
+          message.devId = deviceId;
+        }
+      }
+
+      if (typeof message.timestamp === 'string') {
+        const parsedTimestamp = Number(message.timestamp);
+        if (!Number.isNaN(parsedTimestamp)) {
+          message.timestamp = parsedTimestamp;
+        }
+      }
+
+      if (typeof message.sendStamp === 'string') {
+        const parsedSendStamp = Number(message.sendStamp);
+        if (!Number.isNaN(parsedSendStamp)) {
+          message.sendStamp = parsedSendStamp;
+        }
+      }
+
       this.logger.debug(`📋 Parsed message:`, {
         devId: message.devId,
         topic: message.topic,
@@ -194,6 +226,87 @@ export class MqttProcessorService implements OnModuleInit {
     );
   }
 
+  private isSupportedTopicType(topicType: string): boolean {
+    return ['realtime', 'spc', 'tech', 'wm'].includes(topicType);
+  }
+
+  private getTopicType(mqttTopic: string, message: any): string | null {
+    if (message && typeof message.topic === 'string' && message.topic.trim()) {
+      return message.topic.trim();
+    }
+
+    if (!mqttTopic) return null;
+
+    const normalizedTopic = mqttTopic.startsWith('/')
+      ? mqttTopic.slice(1)
+      : mqttTopic;
+    const parts = normalizedTopic.split('/').filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : null;
+  }
+
+  private getDeviceIdFromTopic(mqttTopic: string): string | null {
+    if (!mqttTopic) return null;
+    const normalizedTopic = mqttTopic.startsWith('/')
+      ? mqttTopic.slice(1)
+      : mqttTopic;
+    const parts = normalizedTopic.split('/').filter(Boolean);
+    if (parts.length < 2) return null;
+    return parts[parts.length - 2] || null;
+  }
+
+  private normalizeMessage(message: any): any {
+    if (!this.shouldUnmarshallMessage(message)) {
+      return message;
+    }
+
+    const plainMessage: any = {};
+    for (const key in message) {
+      plainMessage[key] = this.unmarshallDynamoDBData(message[key]);
+    }
+    return plainMessage;
+  }
+
+  private shouldUnmarshallMessage(message: any): boolean {
+    if (!message || typeof message !== 'object') return false;
+    return (
+      this.isDynamoDBAttribute(message.devId) ||
+      this.isDynamoDBAttribute(message.topic) ||
+      this.isDynamoDBAttribute(message.timestamp) ||
+      this.isDynamoDBAttribute(message.Data)
+    );
+  }
+
+  private isDynamoDBAttribute(value: any): boolean {
+    if (!value || typeof value !== 'object') return false;
+    return (
+      value.S !== undefined ||
+      value.N !== undefined ||
+      value.M !== undefined ||
+      value.L !== undefined ||
+      value.BOOL !== undefined ||
+      value.NULL !== undefined
+    );
+  }
+
+  private unmarshallDynamoDBData(data: any): any {
+    if (data === null || data === undefined) return data;
+    if (data.S !== undefined) return data.S;
+    if (data.N !== undefined) return parseFloat(data.N);
+    if (data.BOOL !== undefined) return data.BOOL;
+    if (data.NULL !== undefined) return null;
+    if (data.M !== undefined) {
+      const result = {};
+      for (const key in data.M) {
+        result[key] = this.unmarshallDynamoDBData(data.M[key]);
+      }
+      return result;
+    }
+    if (data.L !== undefined) {
+      return data.L.map((item) => this.unmarshallDynamoDBData(item));
+    }
+    return data;
+  }
+
   private startMessageProcessor() {
     if (this.isProcessing) {
       return;
@@ -211,6 +324,7 @@ export class MqttProcessorService implements OnModuleInit {
           this.processRealtimeMessages(),
           this.processSPCMessages(),
           this.processTechMessages(),
+          this.processWarningMessages(),
         ]);
 
         // Small delay to prevent tight loop
@@ -244,13 +358,11 @@ export class MqttProcessorService implements OnModuleInit {
       }
 
       this.logger.debug(
-        `📊 Processing realtime data for device ${data.devId}:`,
+        `📊 Processing realtime data for device ${data.devId} (summary - ${Object.keys(data.Data || {}).length} total fields):`,
         {
-          oilTemp: data.Data.OT,
-          status: data.Data.STS,
-          operateMode: data.Data.OPM,
-          tempCount: Object.keys(data.Data).filter((k) => k.startsWith('T'))
-            .length,
+          OT: data.Data.OT,
+          STS: data.Data.STS,
+          OPM: data.Data.OPM,
         },
       );
 
@@ -309,12 +421,15 @@ export class MqttProcessorService implements OnModuleInit {
         return;
       }
 
-      this.logger.debug(`📊 Processing SPC data for device ${data.devId}:`, {
-        cycleNumber: data.Data.CYCN,
-        cycleTime: data.Data.ECYCT,
-        injectionVelocity: data.Data.EIVM,
-        injectionPressure: data.Data.EIPM,
-      });
+      this.logger.debug(
+        `📊 Processing SPC data for device ${data.devId} (summary - ${Object.keys(data.Data || {}).length} total fields):`,
+        {
+          CYCN: data.Data.CYCN,
+          ECYCT: data.Data.ECYCT,
+          EIVM: data.Data.EIVM,
+          EIPM: data.Data.EIPM,
+        },
+      );
 
       // Store in InfluxDB
       this.logger.debug(
@@ -364,6 +479,48 @@ export class MqttProcessorService implements OnModuleInit {
       );
     } catch (error) {
       this.logger.error(`Failed to process tech message:`, error);
+    }
+  }
+
+  private async processWarningMessages() {
+    const message = await this.redisService.dequeueMessage('mqtt:wm', 1);
+    if (!message) return;
+
+    try {
+      const data = message.payload as WarningData;
+
+      // Validate message
+      if (!this.validateMessage(data)) {
+        this.logger.warn(`Invalid warning message received`);
+        return;
+      }
+
+      this.logger.debug(
+        `📊 Processing warning data for device ${data.devId} (summary):`,
+        {
+          wmId: data.Data.wmId,
+          wmMsg: data.Data.wmMsg,
+          wmTime: data.Data.wmTime,
+        },
+      );
+
+      // Store in InfluxDB
+      this.logger.debug(
+        `💾 Writing warning to InfluxDB for device ${data.devId}`,
+      );
+      await this.influxDbService.writeWarningData(data);
+
+      // Publish to Redis for WebSocket broadcast
+      await this.redisService.publish('mqtt:wm:processed', {
+        deviceId: data.devId,
+        data,
+      });
+
+      this.logger.log(
+        `✅ Successfully processed warning message for device ${data.devId}`,
+      );
+    } catch (error) {
+      this.logger.error(`💥 Failed to process warning message:`, error);
     }
   }
 
