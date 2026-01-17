@@ -7,7 +7,7 @@ Scope: serve the frontend at `dashboard.harrytu.cv` via Vercel and the backend a
 - One-off EC2 bootstrap (`scripts/setup.sh` + `scripts/deploy.sh`) and Docker-only variant (`scripts/deploy-compose.sh`).
 - Demo all-in-one EC2 deploy with generated secrets (`scripts/deploy-demo.sh`) and teardown.
 - CDK-based stack with Elastic IP and Docker Compose (`infrastructure/deploy.sh`, `infrastructure/lib/*`), plus instance management helpers (`infrastructure/scripts/manage-instance.sh`, `backup-data.sh`, `restore-data.sh`).
-- General deployment docs: `DEPLOY.md`, `DEPLOYMENT.md`, `infrastructure/README.md`, `infrastructure/PHASED_DEPLOYMENT.md`.
+- General deployment docs: `DEPLOYMENT.md`, `infrastructure/README.md`, `infrastructure/PHASED_DEPLOYMENT.md`.
 
 ## Target Architecture
 

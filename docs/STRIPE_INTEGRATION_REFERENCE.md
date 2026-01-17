@@ -33,11 +33,11 @@ curl --location 'http://localhost:3000/auth/login' \
 
 ### 1. Create Checkout Session
 
-Creates a Stripe Checkout session for subscription purchase.
+Creates a Stripe Checkout session for subscription purchase. If `STRIPE_PLAN_PRICE_ID` or `STRIPE_PLAN_LOOKUP_KEY` is set, the backend uses that plan regardless of `lookupKey`.
 
 **Endpoint:** `POST /api/subscription/create-checkout-session`
 
-**Rate Limit:** 5 requests per minute per user
+**Rate Limit:** 3 requests per second per user
 
 **Request Body:**
 
@@ -54,11 +54,11 @@ curl -X POST 'http://localhost:3000/api/subscription/create-checkout-session' \
 
 **Request Parameters:**
 
-| Field        | Type   | Required | Description                                                                                             |
-| ------------ | ------ | -------- | ------------------------------------------------------------------------------------------------------- |
-| `lookupKey`  | string | Yes      | Stripe price lookup*key, price ID (starts with `price*`), or product ID (starts with `prod\_`)          |
-| `successUrl` | string | Yes      | URL to redirect after successful payment. Use `{CHECKOUT_SESSION_ID}` placeholder to include session ID |
-| `cancelUrl`  | string | Yes      | URL to redirect if user cancels                                                                         |
+| Field        | Type   | Required | Description                                                                                                                                                  |
+| ------------ | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lookupKey`  | string | Yes      | Required by DTO; ignored when `STRIPE_PLAN_PRICE_ID` or `STRIPE_PLAN_LOOKUP_KEY` is set. Accepts a lookup key, price ID (`price_`), or product ID (`prod_`). |
+| `successUrl` | string | Yes      | URL to redirect after successful payment. Use `{CHECKOUT_SESSION_ID}` placeholder to include session ID                                                      |
+| `cancelUrl`  | string | Yes      | URL to redirect if user cancels                                                                                                                              |
 
 **Success Response (200 OK):**
 
@@ -80,6 +80,16 @@ curl -X POST 'http://localhost:3000/api/subscription/create-checkout-session' \
   {
     "statusCode": 400,
     "message": "No price found for lookup key: invalid_key",
+    "error": "Bad Request"
+  }
+  ```
+
+- **400 Bad Request** - Selected plan is inactive
+
+  ```json
+  {
+    "statusCode": 400,
+    "message": "Selected plan is not active",
     "error": "Bad Request"
   }
   ```
@@ -106,11 +116,11 @@ curl -X POST 'http://localhost:3000/api/subscription/create-checkout-session' \
 
 ### 2. Create Portal Session
 
-Creates a Stripe Customer Portal session for managing subscriptions.
+Creates a Stripe Customer Portal session for managing subscriptions. Requires an existing Stripe customer (created during checkout).
 
 **Endpoint:** `POST /api/subscription/create-portal-session`
 
-**Rate Limit:** 10 requests per minute per user
+**Rate Limit:** 3 requests per second per user
 
 **Request Body:**
 
@@ -159,7 +169,7 @@ Retrieves the current user's subscription details.
 
 **Endpoint:** `GET /api/subscription/current`
 
-**Rate Limit:** 30 requests per minute per user
+**Rate Limit:** 20 requests per 10 seconds per user
 
 **Request:**
 
@@ -201,11 +211,22 @@ curl -X GET 'http://localhost:3000/api/subscription/current' \
 
 ### 4. Get Subscription Plans
 
-Retrieves all available subscription plans from Stripe.
+Retrieves the active subscription plan selected by the backend.
 
 **Endpoint:** `GET /api/subscription/plans`
 
-**Rate Limit:** 50 requests per minute per user
+**Rate Limit:** 100 requests per minute per user
+
+**Plan Selection:**
+
+The backend returns a single plan using this priority order:
+
+1. `STRIPE_PLAN_PRICE_ID`
+2. `STRIPE_PLAN_LOOKUP_KEY`
+3. Price or product metadata `primary_plan=true`
+4. Latest active recurring price
+
+Only active prices with active products are eligible.
 
 **Request:**
 
@@ -220,42 +241,14 @@ curl -X GET 'http://localhost:3000/api/subscription/plans' \
 {
   "plans": [
     {
-      "id": "basic_monthly",
-      "name": "Basic",
-      "description": "Perfect for small projects",
-      "price": 9.99,
-      "currency": "USD",
-      "interval": "month",
-      "features": ["Up to 5 machines", "Basic monitoring", "Email support"]
-    },
-    {
       "id": "professional_monthly",
-      "name": "Professional",
-      "description": "Best for growing businesses",
-      "price": 29.99,
-      "currency": "USD",
+      "name": "Professional Plan",
+      "description": "Unlimited monitoring and support",
+      "price": 500,
+      "currency": "TWD",
       "interval": "month",
-      "features": [
-        "Up to 50 machines",
-        "Advanced monitoring",
-        "Real-time alerts",
-        "Priority support"
-      ],
-      "popular": true
-    },
-    {
-      "id": "enterprise_monthly",
-      "name": "Enterprise",
-      "description": "For large scale operations",
-      "price": 99.99,
-      "currency": "USD",
-      "interval": "month",
-      "features": [
-        "Unlimited machines",
-        "Custom integrations",
-        "Dedicated support",
-        "SLA guarantee"
-      ]
+      "features": [],
+      "popular": false
     }
   ]
 }
@@ -263,7 +256,7 @@ curl -X GET 'http://localhost:3000/api/subscription/plans' \
 
 **Demo Mode Response (when Stripe not configured):**
 
-Returns hardcoded demo plans with the same structure.
+Returns a single hardcoded demo plan with the same structure.
 
 ---
 
@@ -273,7 +266,7 @@ Retrieves payment methods for the current user.
 
 **Endpoint:** `GET /api/subscription/payment-methods`
 
-**Rate Limit:** 20 requests per minute per user
+**Rate Limit:** 20 requests per 10 seconds per user
 
 **Request:**
 
@@ -302,6 +295,8 @@ curl -X GET 'http://localhost:3000/api/subscription/payment-methods' \
 }
 ```
 
+If the customer exists but has no payment methods, `payment_methods` is an empty array. If no Stripe customer exists yet, this endpoint returns 404 (a customer is created when a checkout session is created).
+
 **Error Responses:**
 
 - **404 Not Found** - No customer found
@@ -321,7 +316,7 @@ Cancels a subscription at the end of the current billing period.
 
 **Endpoint:** `DELETE /api/subscription/:subscriptionId`
 
-**Rate Limit:** 5 requests per minute per user
+**Rate Limit:** 3 requests per second per user
 
 **Request:**
 
@@ -371,7 +366,7 @@ Receives and processes Stripe webhook events.
 
 **Endpoint:** `POST /api/webhooks/stripe`
 
-**Authentication:** Stripe signature verification (no JWT required)
+**Authentication:** Stripe signature verification using `STRIPE_WEBHOOK_SECRET` (no JWT required)
 
 **Request:**
 
@@ -486,14 +481,14 @@ When rate limits are exceeded, you'll receive:
 
 **Rate Limits by Endpoint:**
 
-| Endpoint                      | Limit | Period   |
-| ----------------------------- | ----- | -------- |
-| POST /create-checkout-session | 5     | 1 minute |
-| POST /create-portal-session   | 10    | 1 minute |
-| GET /current                  | 30    | 1 minute |
-| GET /plans                    | 50    | 1 minute |
-| GET /payment-methods          | 20    | 1 minute |
-| DELETE /:subscriptionId       | 5     | 1 minute |
+| Endpoint                      | Limit | Period     |
+| ----------------------------- | ----- | ---------- |
+| POST /create-checkout-session | 3     | 1 second   |
+| POST /create-portal-session   | 3     | 1 second   |
+| GET /current                  | 20    | 10 seconds |
+| GET /plans                    | 100   | 1 minute   |
+| GET /payment-methods          | 20    | 10 seconds |
+| DELETE /:subscriptionId       | 3     | 1 second   |
 
 ---
 
@@ -506,7 +501,27 @@ Required environment variables in `.env` or `.env.local`:
 STRIPE_SECRET_KEY=sk_test_your_key_here
 STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
 STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
+
+# Optional single-plan selection
+STRIPE_PLAN_PRICE_ID=price_123
+STRIPE_PLAN_LOOKUP_KEY=professional_monthly
 ```
+
+`STRIPE_PLAN_PRICE_ID` takes precedence over `STRIPE_PLAN_LOOKUP_KEY` when both are set.
+
+---
+
+## Expected Workflow
+
+1. Configure Stripe keys and plan selector variables in `.env.local`.
+2. Call `GET /api/subscription/plans` to retrieve the single plan.
+3. Call `POST /api/subscription/create-checkout-session` with the plan id and redirect the user to `data.url`.
+4. Complete payment in Stripe Checkout.
+5. Stripe sends webhook events to `POST /api/webhooks/stripe`; the backend updates subscription records.
+6. Call `GET /api/subscription/current` to display subscription status.
+7. Call `GET /api/subscription/payment-methods` to list saved cards (may be empty).
+8. Optional: `POST /api/subscription/create-portal-session` to manage billing.
+9. Cancel via `DELETE /api/subscription/:subscriptionId`, then refresh `GET /api/subscription/current`.
 
 ---
 

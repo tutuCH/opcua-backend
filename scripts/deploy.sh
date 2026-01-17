@@ -31,8 +31,13 @@ USER_DATA="$SCRIPT_DIR/.user-data-compose.sh"
 cat > "$USER_DATA" <<UDEOF
 #!/bin/bash -xe
 dnf update -y
-dnf install -y docker git docker-compose-plugin
+dnf install -y docker git curl
 systemctl enable --now docker
+
+if ! command -v docker-compose >/dev/null 2>&1; then
+  curl -L "https://github.com/docker/compose/releases/download/v2.27.1/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+  chmod +x /usr/local/bin/docker-compose
+fi
 
 mkdir -p /opt/app && cd /opt/app
 git clone "$REPO_URL" src || (cd src && git pull)
@@ -41,10 +46,10 @@ if [ -n "$REPO_SUBDIR" ] && [ -d "$REPO_SUBDIR" ]; then cd "$REPO_SUBDIR"; fi
 
 echo "$ENV_B64" | base64 -d > .env.compose
 
-docker compose version || true
-docker compose pull || true
-docker compose build --no-cache backend
-docker compose up -d
+/usr/local/bin/docker-compose version || true
+/usr/local/bin/docker-compose pull || true
+/usr/local/bin/docker-compose build --no-cache backend
+/usr/local/bin/docker-compose up -d
 UDEOF
 
 echo "Launching instance in $REGION ..."

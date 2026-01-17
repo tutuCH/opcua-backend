@@ -11,6 +11,7 @@ Complete deployment guide for all environments: Local, Planning, Testing, and Pr
 3. [Local Development](#local-development)
 4. [AWS Deployment](#aws-deployment)
    - [Prerequisites](#prerequisites)
+   - [Quick EC2 Deploy](#quick-ec2-deploy)
    - [Planning Phase](#planning-phase-on-demand-staging)
    - [Testing Phase](#testing-phase-1-10-machines)
    - [Production Phase](#production-phase-50-100-machines)
@@ -40,32 +41,37 @@ docker-compose logs -f backend
 
 **Cost**: $0/month
 
-### AWS Deployment
+### AWS Deployment (Quick EC2)
 
 ```bash
 # 1. Configure AWS credentials
 aws configure
 
-# 2. Deploy to AWS
-cd infrastructure
-DEPLOY_ENV=testing ./deploy.sh
+# 2. Create env file (fill secrets)
+cp .env.compose.example .env.compose
 
-# 3. Manage instance
-./scripts/manage-instance.sh status
+# 3. Deploy to AWS
+./deploy.sh
 ```
 
-**Cost**: $18/month (testing) or $35/month (production)
+**Notes**:
+
+- Uses `scripts/deploy.sh` to launch a single EC2 with Docker Compose.
+- State file is stored at `scripts/.deploy_state`.
+- To tear down: `./scripts/teardown.sh`.
+
+**Cost**: $15–$35/month depending on instance size.
 
 ---
 
 ## Environment Overview
 
-| Environment | Use Case | Machines | Cost/Month | Instance Type | Storage | Elastic IP |
-|------------|----------|----------|------------|---------------|---------|------------|
-| **Local** | Development | 0 (mock data) | **$0** | N/A (Docker on laptop) | N/A | N/A |
-| **Planning** | Occasional staging | 0 | **$5** | t3.small | 30 GB | No (dynamic) |
-| **Testing** | Testing with real machines | 1-10 | **$18** | t3.small | 30 GB | Yes (static) |
-| **Production** | Full deployment | 50-100 | **$35** | t3.medium | 50 GB | Yes (static) |
+| Environment    | Use Case                   | Machines      | Cost/Month | Instance Type          | Storage | Elastic IP   |
+| -------------- | -------------------------- | ------------- | ---------- | ---------------------- | ------- | ------------ |
+| **Local**      | Development                | 0 (mock data) | **$0**     | N/A (Docker on laptop) | N/A     | N/A          |
+| **Planning**   | Occasional staging         | 0             | **$5**     | t3.small               | 30 GB   | No (dynamic) |
+| **Testing**    | Testing with real machines | 1-10          | **$18**    | t3.small               | 30 GB   | Yes (static) |
+| **Production** | Full deployment            | 50-100        | **$35**    | t3.medium              | 50 GB   | Yes (static) |
 
 **6-Month Cost Projection**: $99 (vs $210 if using production from day 1) = **53% savings**
 
@@ -163,14 +169,14 @@ mosquitto_pub -h localhost -t factory/test/machine/test-001/realtime -m '{"times
 
 ### Step 5: Access Services
 
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| Backend API | http://localhost:3000 | N/A |
-| Health Check | http://localhost:3000/health | N/A |
-| InfluxDB UI | http://localhost:8086 | See .env.compose |
-| MQTT Broker | mqtt://localhost:1883 | Anonymous (local only) |
-| PostgreSQL | localhost:5432 | See .env.compose |
-| Redis | localhost:6379 | See .env.compose |
+| Service      | URL                          | Credentials            |
+| ------------ | ---------------------------- | ---------------------- |
+| Backend API  | http://localhost:3000        | N/A                    |
+| Health Check | http://localhost:3000/health | N/A                    |
+| InfluxDB UI  | http://localhost:8086        | See .env.compose       |
+| MQTT Broker  | mqtt://localhost:1883        | Anonymous (local only) |
+| PostgreSQL   | localhost:5432               | See .env.compose       |
+| Redis        | localhost:6379               | See .env.compose       |
 
 ### Development Workflow
 
@@ -195,12 +201,14 @@ docker-compose down -v
 ### Mock Data
 
 With `ENABLE_MOCK_DATA=true`, the system simulates:
+
 - 10 injection molding machines
 - Realtime data every 5 seconds per machine
 - SPC data every 30-60 seconds per machine
 - Random temperature variations and alerts
 
 **Topics**:
+
 - `factory/factory-{id}/machine/machine-{id}/realtime`
 - `factory/factory-{id}/machine/machine-{id}/spc`
 - `factory/factory-{id}/machine/machine-{id}/tech`
@@ -220,6 +228,7 @@ With `ENABLE_MOCK_DATA=true`, the system simulates:
 #### 2. Install Required Tools
 
 **AWS CLI**:
+
 ```bash
 # macOS
 brew install awscli
@@ -234,6 +243,7 @@ aws --version
 ```
 
 **AWS CDK**:
+
 ```bash
 npm install -g aws-cdk
 
@@ -242,6 +252,7 @@ cdk --version
 ```
 
 **jq** (JSON processor):
+
 ```bash
 # macOS
 brew install jq
@@ -272,10 +283,32 @@ aws sts get-caller-identity
 Edit `infrastructure/lib/opcua-backend-stack.ts` (around line 107):
 
 ```typescript
-'git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git opcua-backend || {'
+'git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git opcua-backend || {';
 ```
 
 Replace with your actual GitHub repository URL.
+
+---
+
+### Quick EC2 Deploy
+
+Use this for a single-instance deployment managed from this repo.
+
+```bash
+cp .env.compose.example .env.compose
+./deploy.sh
+```
+
+- Default region: `us-east-1` (override with `REGION=...`).
+- Default instance: `t3.small` (override with `INSTANCE_TYPE=...`).
+- SSH key: `opcua-backend-key.pem` (generated if missing).
+- State file: `scripts/.deploy_state`.
+
+To tear down:
+
+```bash
+./scripts/teardown.sh
+```
 
 ---
 
@@ -323,12 +356,12 @@ DEPLOY_ENV=planning ./deploy.sh
 
 ### Cost Breakdown
 
-| State | Compute | Storage | Elastic IP | Total |
-|-------|---------|---------|------------|-------|
-| Running (per hour) | $0.0208 | - | - | $0.0208/hr |
-| Running (per day) | $0.50 | - | - | $0.50/day |
-| **Stopped** | **$0** | **$2.40/month** | **$0** | **$2.40/month** |
-| **4 hrs/week usage** | **$0.33/month** | **$2.40/month** | **$0** | **~$3/month** |
+| State                | Compute         | Storage         | Elastic IP | Total           |
+| -------------------- | --------------- | --------------- | ---------- | --------------- |
+| Running (per hour)   | $0.0208         | -               | -          | $0.0208/hr      |
+| Running (per day)    | $0.50           | -               | -          | $0.50/day       |
+| **Stopped**          | **$0**          | **$2.40/month** | **$0**     | **$2.40/month** |
+| **4 hrs/week usage** | **$0.33/month** | **$2.40/month** | **$0**     | **~$3/month**   |
 
 ### Use Cases
 
@@ -409,6 +442,7 @@ docker stats
 ### When to Upgrade to Production
 
 Upgrade when you see:
+
 - ✅ More than 15 machines connected
 - ✅ CPU usage consistently > 80%
 - ✅ Memory usage consistently > 90%
@@ -857,21 +891,18 @@ Edit `infrastructure/lib/opcua-backend-stack.ts`:
 
 ```typescript
 // Change from:
-securityGroup.addIngressRule(
-  ec2.Peer.anyIpv4(),
-  ec2.Port.tcp(22),
-  'Allow SSH'
-);
+securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'Allow SSH');
 
 // To:
 securityGroup.addIngressRule(
-  ec2.Peer.ipv4('YOUR_IP_ADDRESS/32'),  // e.g., 123.45.67.89/32
+  ec2.Peer.ipv4('YOUR_IP_ADDRESS/32'), // e.g., 123.45.67.89/32
   ec2.Port.tcp(22),
-  'Allow SSH from my IP'
+  'Allow SSH from my IP',
 );
 ```
 
 Then redeploy:
+
 ```bash
 cd infrastructure
 cdk deploy
@@ -932,17 +963,20 @@ aws cloudwatch put-metric-alarm \
 ## Cost Optimization Checklist
 
 ### Planning Phase
+
 - [ ] Use local Docker Compose for most development
 - [ ] Deploy to AWS only when needed for staging
 - [ ] Stop instance when not in use (`./scripts/manage-instance.sh stop`)
 - [ ] Consider auto-schedule (9 AM - 6 PM weekdays) for $6/month
 
 ### Testing Phase
+
 - [ ] Monitor CPU/memory usage weekly
 - [ ] Upgrade to production when >15 machines or CPU >80%
 - [ ] Set up CloudWatch alarms for resource usage
 
 ### Production Phase
+
 - [ ] Enable automated backups to S3
 - [ ] Consider reserved instances for 30% savings (1-year commitment)
 - [ ] Monitor and optimize database queries
@@ -961,14 +995,15 @@ aws cloudwatch put-metric-alarm \
 
 ## Summary
 
-| Phase | Deploy Command | Monthly Cost | Use Case |
-|-------|---------------|--------------|----------|
-| **Local** | `docker-compose up -d` | **$0** | Development |
-| **Planning** | `DEPLOY_ENV=planning ./deploy.sh` | **$5** | Occasional staging |
-| **Testing** | `DEPLOY_ENV=testing ./deploy.sh` | **$18** | 1-10 machines |
-| **Production** | `DEPLOY_ENV=production ./deploy.sh` | **$35** | 50-100 machines |
+| Phase          | Deploy Command                      | Monthly Cost | Use Case           |
+| -------------- | ----------------------------------- | ------------ | ------------------ |
+| **Local**      | `docker-compose up -d`              | **$0**       | Development        |
+| **Planning**   | `DEPLOY_ENV=planning ./deploy.sh`   | **$5**       | Occasional staging |
+| **Testing**    | `DEPLOY_ENV=testing ./deploy.sh`    | **$18**      | 1-10 machines      |
+| **Production** | `DEPLOY_ENV=production ./deploy.sh` | **$35**      | 50-100 machines    |
 
 **Your Path**:
+
 1. Start with **Local** ($0/month) ← You are here
 2. Move to **Testing** when you have 1-10 machines ($18/month)
 3. Upgrade to **Production** when scaling to 50-100 machines ($35/month)

@@ -23,12 +23,11 @@ export class WebhookController {
     private readonly billingSubscriptionService: BillingSubscriptionService,
     private readonly configService: ConfigService,
   ) {
-    this.stripe = new Stripe(
-      this.configService.get<string>('STRIPE_SECRET_KEY'),
-      {
-        apiVersion: '2025-07-30.basil',
-      },
-    );
+    const stripeSecretKey = this.configService.get<string>('stripe.secretKey');
+
+    this.stripe = new Stripe(stripeSecretKey, {
+      apiVersion: '2025-07-30.basil',
+    });
   }
 
   @Post('stripe')
@@ -44,7 +43,7 @@ export class WebhookController {
     const rawBody = req.rawBody || req.body;
 
     const webhookSecret = this.configService.get<string>(
-      'STRIPE_WEBHOOK_SECRET',
+      'stripe.webhookSecret',
     );
 
     if (!webhookSecret) {

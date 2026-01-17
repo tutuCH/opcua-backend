@@ -82,4 +82,6 @@ export const stripeConfig = registerAs('stripe', () => ({
   publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
   secretKey: process.env.STRIPE_SECRET_KEY || null,
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || null,
+  planLookupKey: process.env.STRIPE_PLAN_LOOKUP_KEY || null,
+  planPriceId: process.env.STRIPE_PLAN_PRICE_ID || null,
 }));
