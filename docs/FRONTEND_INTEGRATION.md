@@ -753,6 +753,12 @@ Response (example):
 
 ### SPC v2.0 Performance-Optimized Endpoints
 
+**Field Validation:** All SPC endpoints validate field names against an allowed whitelist. Invalid field names will return `400 Bad Request` with a list of valid fields.
+
+Valid SPC fields:
+- `cycle_number`, `cycle_time`, `injection_velocity_max`, `injection_pressure_max`, `switch_pack_time`, `temp_1`, `temp_2`, `temp_3` (required)
+- `switch_pack_pressure`, `switch_pack_position`, `injection_time`, `plasticizing_time`, `plasticizing_pressure_max`, `temp_4` through `temp_10`, `injection_pressure_set`, `fill_cooling_time`, `injection_pressure_set_min`, `oil_temperature_cycle`, `end_mold_open_speed`, `injection_start_speed` (optional)
+
 #### GET /machines/:id/spc/limits
 Get precomputed SPC control limits (UCL, LCL, Mean, Standard Deviation) with caching.
 
