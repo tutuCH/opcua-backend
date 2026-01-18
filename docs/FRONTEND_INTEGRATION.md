@@ -751,6 +751,163 @@ Response (example):
 }
 ```
 
+### SPC v2.0 Performance-Optimized Endpoints
+
+#### GET /machines/:id/spc/limits
+Get precomputed SPC control limits (UCL, LCL, Mean, Standard Deviation) with caching.
+
+**Purpose:** Offloads CPU-intensive calculations from frontend to backend.
+
+Query params:
+- `fields` (required) - Comma-separated field names (e.g., `cycle_time,injection_velocity_max`)
+- `lookback` (optional, default `24h`) - Time range: `1h`, `6h`, `24h`, `7d`
+- `sigma` (optional, default `3`) - Number of standard deviations: `2`, `3`, `4`
+- `forceRecalculate` (optional, default `false`) - Bypass cache
+
+Response example:
+```json
+{
+  "limits": {
+    "cycle_time": {
+      "mean": 12.34,
+      "stdDev": 0.82,
+      "ucl": 14.8,
+      "lcl": 9.88,
+      "n": 1440,
+      "calculatedAt": "2026-01-18T10:00:00Z",
+      "expiresAt": "2026-01-18T10:30:00Z",
+      "isCached": false
+    }
+  },
+  "metadata": {
+    "deviceId": "Machine 1",
+    "calculationTime": "45ms",
+    "cacheKey": "spc:limits:Machine 1:cycle_time:24h:sigma3"
+  }
+}
+```
+
+Cache behavior:
+- 30-minute TTL
+- Frontend should refresh 5 minutes before `expiresAt`
+- Use `forceRecalculate=true` to bypass cache
+
+#### GET /machines/:id/spc/latest
+Get the most recent N data points (cached).
+
+Query params:
+- `fields` (optional) - Comma-separated field names
+- `count` (optional, default `10`) - Number of points (1-100)
+
+Response example:
+```json
+{
+  "deviceId": "Machine 1",
+  "data": [
+    { "_time": "2026-01-18T10:46:00Z", "cycle_time": 12.6 },
+    { "_time": "2026-01-18T10:47:00Z", "cycle_time": 12.4 }
+  ],
+  "metadata": {
+    "count": 2,
+    "cachedAt": "2026-01-18T10:47:01Z"
+  }
+}
+```
+
+Cache: 10-second TTL for high-frequency polling.
+
+#### GET /machines/:id/spc/history-optimized
+Fetch historical data with intelligent downsampling (Grafana-style).
+
+Query params:
+- `from` (required) - Start timestamp (ISO 8601)
+- `to` (required) - End timestamp (ISO 8601)
+- `fields` (optional) - Comma-separated field names
+- `step` (optional, default `50`) - Target number of data points
+
+Response example:
+```json
+{
+  "deviceId": "Machine 1",
+  "data": [
+    { "_time": "2026-01-18T09:00:00Z", "cycle_time": 12.3 },
+    { "_time": "2026-01-18T09:12:00Z", "cycle_time": 12.5 }
+  ],
+  "metadata": {
+    "timeRange": "2026-01-18T09:00:00Z/2026-01-18T10:00:00Z",
+    "pointsReturned": 2,
+    "requestedFields": ["cycle_time"],
+    "queryTime": "15ms"
+  }
+}
+```
+
+Automatic downsampling:
+- ≤ 1 hour: raw data
+- ≤ 6 hours: 1-minute average
+- ≤ 24 hours: 5-minute average
+- ≤ 7 days: 15-minute average
+- > 7 days: 1-hour average
+
+#### GET /machines/:id/spc/metadata
+Get field metadata for dynamic chart configuration.
+
+Response example:
+```json
+{
+  "deviceId": "Machine 1",
+  "fields": [
+    {
+      "name": "cycle_time",
+      "displayName": "Cycle Time",
+      "unit": "seconds",
+      "dataType": "float",
+      "min": 10.0,
+      "max": 15.0,
+      "suggestedRange": [10, 15]
+    },
+    {
+      "name": "injection_velocity_max",
+      "displayName": "Injection Velocity (Max)",
+      "unit": "mm/s",
+      "dataType": "float",
+      "min": 70.0,
+      "max": 95.0,
+      "suggestedRange": [70, 95]
+    }
+  ],
+  "capabilities": {
+    "supportedAggregations": ["mean", "median", "min", "max", "stdDev", "count"],
+    "supportedResolutions": ["auto", "1m", "5m", "15m", "1h", "6h", "1d"],
+    "maxPointsPerQuery": 10000
+  }
+}
+```
+
+### Frontend Integration Example for SPC v2.0
+
+```typescript
+// 1. Fetch control limits (cached)
+const limits = await fetch(
+  `/machines/${id}/spc/limits?fields=cycle_time&lookback=24h&sigma=3`
+).then(r => r.json());
+
+// 2. Fetch historical data with downsampling
+const history = await fetch(
+  `/machines/${id}/spc/history-optimized?from=${startDate}&to=${endDate}&fields=cycle_time&step=50`
+).then(r => r.json());
+
+// 3. Fetch latest data for real-time updates
+const latest = await fetch(
+  `/machines/${id}/spc/latest?count=5`
+).then(r => r.json());
+
+// 4. Use metadata for dynamic configuration
+const metadata = await fetch(
+  `/machines/${id}/spc/metadata`
+).then(r => r.json());
+```
+
 #### GET /machines/:id/status
 Returns the latest cached status from Redis (or a "No status" message).
 
@@ -1931,6 +2088,38 @@ const { data, aggregation } = await res.json();
 - `1d` - For very long time ranges (weeks)
 
 Aggregated queries return significantly fewer records while preserving trends.
+
+### SPC Performance Optimization
+
+For SPC charts, use the v2.0 endpoints:
+
+1. **Control Limits**: Use `/spc/limits` instead of calculating client-side
+   - Cached for 30 minutes
+   - Includes UCL, LCL, mean, stdDev
+
+2. **Historical Data**: Use `/spc/history-optimized` for large time ranges
+   - Automatic downsampling based on time range
+   - Field projection reduces payload size
+
+3. **Real-time Updates**: Use `/spc/latest` instead of polling
+   - 10-second cache
+   - Returns only requested fields
+
+Example complete SPC chart integration:
+```typescript
+// Initial load
+const [limits, history, metadata] = await Promise.all([
+  fetch(`/machines/${id}/spc/limits?fields=cycle_time`).then(r => r.json()),
+  fetch(`/machines/${id}/spc/history-optimized?from=${dayAgo}&to=${now}&fields=cycle_time`).then(r => r.json()),
+  fetch(`/machines/${id}/spc/metadata`).then(r => r.json())
+]);
+
+// Real-time polling (10-second cache friendly)
+setInterval(async () => {
+  const latest = await fetch(`/machines/${id}/spc/latest?count=1`).then(r => r.json());
+  updateChart(latest.data[0]);
+}, 10000);
+```
 
 ## Example Frontend Snippets
 
