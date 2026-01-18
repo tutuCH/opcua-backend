@@ -523,6 +523,7 @@ export class MachinesController {
     @Query('fields') fields?: string,
     @Query('step') step?: string,
   ) {
+    const startTime = Date.now();
     try {
       await this.machinesService.findOneForUser(+id, userId);
 
@@ -571,7 +572,7 @@ export class MachinesController {
             timeRange: `${from}/${to}`,
             pointsReturned: filteredData.length,
             requestedFields: fieldsArray,
-            queryTime: `${Date.now()}ms`,
+            queryTime: `${Date.now() - startTime}ms`,
           },
         };
       }
@@ -582,7 +583,7 @@ export class MachinesController {
         metadata: {
           timeRange: `${from}/${to}`,
           pointsReturned: data.length,
-          queryTime: `${Date.now()}ms`,
+          queryTime: `${Date.now() - startTime}ms`,
         },
       };
     } catch (error) {
@@ -605,6 +606,7 @@ export class MachinesController {
     @Query('fields') fields?: string,
     @Query('step') step?: string,
   ) {
+    const startTime = Date.now();
     try {
       await this.machinesService.findOneForUser(+id, userId);
 
@@ -649,7 +651,7 @@ export class MachinesController {
             timeRange: `${from}/${to}`,
             pointsReturned: filteredData.length,
             requestedFields: fieldsArray,
-            queryTime: `${Date.now()}ms`,
+            queryTime: `${Date.now() - startTime}ms`,
           },
         };
       }
@@ -660,7 +662,7 @@ export class MachinesController {
         metadata: {
           timeRange: `${from}/${to}`,
           pointsReturned: data.length,
-          queryTime: `${Date.now()}ms`,
+          queryTime: `${Date.now() - startTime}ms`,
         },
       };
     } catch (error) {
