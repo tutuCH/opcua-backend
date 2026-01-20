@@ -50,6 +50,9 @@ backend.env
 .temp
 .tmp
 
+# Worktrees
+.worktrees
+
 # Runtime data
 pids
 *.pid
