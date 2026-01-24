@@ -211,7 +211,7 @@ export class DebugController {
   async getSimpleMachineCheck() {
     try {
       const machines = await this.machineRepository.find({
-        select: ['machineId', 'machineName', 'machineIpAddress', 'status'],
+        select: ['machineId', 'machineName', 'status'],
       });
 
       return {
@@ -221,7 +221,6 @@ export class DebugController {
         machines: machines.map((m) => ({
           id: m.machineId,
           name: `"${m.machineName}"`, // Quoted to see exact spacing
-          ip: m.machineIpAddress,
           status: m.status,
         })),
         targetMachineExists: machines.some(
@@ -254,7 +253,6 @@ export class DebugController {
         machines?: Array<{
           id: number;
           name: string;
-          ip: string;
           status: string;
         }>;
         targetMachineCache?: {
@@ -280,14 +278,13 @@ export class DebugController {
       // Check machines in database
       try {
         const machines = await this.machineRepository.find({
-          select: ['machineId', 'machineName', 'machineIpAddress', 'status'],
+          select: ['machineId', 'machineName', 'status'],
         });
         results.machines = {
           count: machines.length,
           machines: machines.map((m) => ({
             id: m.machineId,
             name: m.machineName,
-            ip: m.machineIpAddress,
             status: m.status,
           })),
         };

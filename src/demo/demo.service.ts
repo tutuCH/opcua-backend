@@ -60,7 +60,6 @@ export class DemoService {
           return {
             id: machine.machineId,
             name: machine.machineName,
-            ipAddress: machine.machineIpAddress,
             index: machine.machineIndex,
             status: machine.status,
             factory: machine.factory?.factoryName,
@@ -106,7 +105,6 @@ export class DemoService {
         machine: {
           id: machine.machineId,
           name: machine.machineName,
-          ipAddress: machine.machineIpAddress,
           factory: machine.factory?.factoryName,
         },
         status: cachedStatus || null,

@@ -25,10 +25,31 @@ import { AppConfigModule } from './config/config.module';
 import { HealthModule } from './health/health.module';
 import { DemoModule } from './demo/demo.module';
 import { DebugModule } from './debug/debug.module';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { SPCSeriesModule } from './spc-series/spc-series.module';
 @Module({
   imports: [
     // Configuration Module (global)
     AppConfigModule,
+
+    // Rate Limiting
+    ThrottlerModule.forRoot([
+      {
+        name: 'short',
+        ttl: 1000,
+        limit: 3,
+      },
+      {
+        name: 'medium',
+        ttl: 10000,
+        limit: 20,
+      },
+      {
+        name: 'long',
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
 
     // Database Connection (PostgreSQL - replaces MySQL)
     TypeOrmModule.forRootAsync({
@@ -41,13 +62,16 @@ import { DebugModule } from './debug/debug.module';
         password: configService.get('database.postgres.password'),
         database: configService.get('database.postgres.database'),
         entities: [User, Factory, Machine],
-        synchronize: configService.get('app.environment') !== 'production',
+        synchronize:
+          configService.get('database.postgres.synchronize') ??
+          configService.get('app.environment') !== 'production',
         autoLoadEntities: true,
         // Disable SSL for Docker Compose deployments (local PostgreSQL)
         // Enable SSL only for managed PostgreSQL services (AWS RDS, etc.)
-        ssl: process.env.POSTGRES_SSL === 'true'
-          ? { rejectUnauthorized: false }
-          : false,
+        ssl:
+          process.env.POSTGRES_SSL === 'true'
+            ? { rejectUnauthorized: false }
+            : false,
       }),
     }),
 
@@ -86,6 +110,7 @@ import { DebugModule } from './debug/debug.module';
 
     // Development Debug Module (remove in production)
     DebugModule,
+    SPCSeriesModule,
   ],
   controllers: [],
   providers: [

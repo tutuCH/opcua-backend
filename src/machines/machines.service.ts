@@ -1,5 +1,7 @@
 import {
+  BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -70,8 +72,24 @@ export class MachinesService {
       // Save the new machine to the database
       return await this.machineRepository.save(newMachine);
     } catch (error) {
+      // Preserve explicit application errors (ownership checks, missing records, etc.)
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
       if (error instanceof QueryFailedError) {
-        const errorMessage = error.message;
+        const driverError = (error as any).driverError as
+          | {
+              code?: string;
+              errno?: number;
+              sqlMessage?: string;
+              message?: string;
+            }
+          | undefined;
+
+        const errorMessage =
+          driverError?.sqlMessage || driverError?.message || error.message;
+
         if (errorMessage.includes('ER_NO_REFERENCED_ROW')) {
           if (errorMessage.includes('FOREIGN KEY (`userId`)')) {
             throw new NotFoundException(`User with ID ${userId} not found`);
@@ -80,12 +98,38 @@ export class MachinesService {
               `Factory with ID ${factoryId} not found`,
             );
           }
-        } else if (errorMessage.includes('Duplicate entry')) {
-          throw new ConflictException('Machine IP Address already exists');
         }
+
+        // Common MySQL constraint / validation failures
+        if (driverError?.code === 'ER_DUP_ENTRY') {
+          throw new ConflictException(
+            'Machine already exists (duplicate value)',
+          );
+        }
+
+        if (
+          driverError?.code === 'ER_TRUNCATED_WRONG_VALUE_FOR_FIELD' ||
+          driverError?.code === 'ER_WARN_DATA_OUT_OF_RANGE'
+        ) {
+          throw new BadRequestException(
+            `Invalid machine data: ${errorMessage}`,
+          );
+        }
+
+        this.logger.error(
+          `Failed to create machine due to database error: ${errorMessage}`,
+        );
+        throw new InternalServerErrorException(
+          `Failed to create machine due to database error: ${errorMessage}`,
+        );
       }
 
-      throw new InternalServerErrorException('An unexpected error occurred');
+      // Unknown error path: log details but keep response readable.
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to create machine: ${message}`, error as any);
+      throw new InternalServerErrorException(
+        `Failed to create machine: ${message}`,
+      );
     }
   }
 
@@ -307,7 +351,6 @@ export class MachinesService {
         'factory.height',
         'machine.machineId',
         'machine.machineName',
-        'machine.machineIpAddress',
         'machine.machineIndex',
       ])
       .where('user.userId = :userId', { userId })
@@ -330,7 +373,6 @@ export class MachinesService {
             .map((machine) => ({
               machineId: machine.machineId,
               machineName: machine.machineName,
-              machineIpAddress: machine.machineIpAddress,
               machineIndex: parseInt(machine.machineIndex || '0'),
             }))
             .sort((a, b) => a.machineIndex - b.machineIndex)

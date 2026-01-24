@@ -655,6 +655,316 @@ export class InfluxDBService implements OnModuleInit {
     }
   }
 
+  async querySPCDataWithIntelligentDownsampling(
+    deviceId: string,
+    from: string,
+    to: string,
+    _step: number,
+  ): Promise<any[]> {
+    const timeRange = this.calculateTimeRange(from, to);
+    const resolution = this.calculateOptimalResolution(timeRange);
+
+    let query = `
+      from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+        |> range(start: ${from}, stop: ${to})
+        |> filter(fn: (r) => r["_measurement"] == "spc")
+        |> filter(fn: (r) => r["device_id"] == "${deviceId}")
+    `;
+
+    if (resolution !== 'raw') {
+      query += `|> aggregateWindow(every: ${resolution}, fn: mean, createEmpty: false)`;
+    }
+
+    query += `
+      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+      |> sort(columns: ["_time"], desc: true)
+    `;
+
+    const result = [];
+    return new Promise((resolve, reject) => {
+      this.queryApi.queryRows(query, {
+        next: (row, tableMeta) => {
+          const record = tableMeta.toObject(row);
+          result.push(record);
+        },
+        error: (error) => {
+          this.logger.error(
+            `SPC intelligent downsampling query failed for device ${deviceId}`,
+            error,
+          );
+          reject(error);
+        },
+        complete: () => {
+          this.logger.debug(
+            `SPC intelligent downsampling query completed for device ${deviceId}, resolution: ${resolution}, ${result.length} records`,
+          );
+          resolve(result);
+        },
+      });
+    });
+  }
+
+  async queryRealtimeDataWithIntelligentDownsampling(
+    deviceId: string,
+    from: string,
+    to: string,
+    _step: number,
+  ): Promise<any[]> {
+    const timeRange = this.calculateTimeRange(from, to);
+    const resolution = this.calculateOptimalResolution(timeRange);
+
+    let query = `
+      from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+        |> range(start: ${from}, stop: ${to})
+        |> filter(fn: (r) => r["_measurement"] == "realtime")
+        |> filter(fn: (r) => r["device_id"] == "${deviceId}")
+    `;
+
+    if (resolution !== 'raw') {
+      query += `|> aggregateWindow(every: ${resolution}, fn: mean, createEmpty: false)`;
+    }
+
+    query += `
+      |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+      |> sort(columns: ["_time"], desc: true)
+    `;
+
+    const result = [];
+    return new Promise((resolve, reject) => {
+      this.queryApi.queryRows(query, {
+        next: (row, tableMeta) => {
+          const record = tableMeta.toObject(row);
+          result.push(record);
+        },
+        error: (error) => {
+          this.logger.error(
+            `Intelligent downsampling query failed for device ${deviceId}`,
+            error,
+          );
+          reject(error);
+        },
+        complete: () => {
+          this.logger.debug(
+            `Intelligent downsampling query completed for device ${deviceId}, resolution: ${resolution}, ${result.length} records`,
+          );
+          resolve(result);
+        },
+      });
+    });
+  }
+
+  calculateOptimalResolution(timeRange: string): string {
+    const rangeInHours = this.parseTimeRangeToHours(timeRange);
+
+    if (rangeInHours <= 1) return 'raw';
+    if (rangeInHours <= 6) return '1m';
+    if (rangeInHours <= 24) return '5m';
+    if (rangeInHours <= 168) return '15m';
+    return '1h';
+  }
+
+  private parseTimeRangeToHours(timeRange: string): number {
+    const match = timeRange.match(/-(\d+)([smhd])/);
+    if (!match) return 1;
+
+    const value = parseInt(match[1]);
+    const unit = match[2];
+
+    switch (unit) {
+      case 's':
+        return value / 3600;
+      case 'm':
+        return value / 60;
+      case 'h':
+        return value;
+      case 'd':
+        return value * 24;
+      default:
+        return 1;
+    }
+  }
+
+  private calculateTimeRange(from: string, to: string): string {
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    const diffHours =
+      (toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60);
+    return `-${Math.ceil(diffHours)}h`;
+  }
+
+  async querySPCDataWithFields(
+    deviceId: string,
+    timeRange: string = '-1h',
+    fields: string[],
+    maxPoints: number = 10000,
+  ): Promise<any[]> {
+    try {
+      const escapedDeviceId = deviceId.replace(/"/g, '"');
+      const fieldsFilter = fields
+        .map((f) => `r["_field"] == "${f}"`)
+        .join(' or ');
+
+      let query = `
+        from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+          |> range(start: ${timeRange})
+          |> filter(fn: (r) => r["_measurement"] == "spc")
+          |> filter(fn: (r) => r["device_id"] == "${escapedDeviceId}")
+      `;
+
+      if (fields.length > 0) {
+        query += `|> filter(fn: (r) => ${fieldsFilter})`;
+      }
+
+      if (maxPoints > 0) {
+        query += `\n          |> limit(n: ${maxPoints})`;
+      }
+
+      query += `
+        |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+        |> sort(columns: ["_time"], desc: true)
+      `;
+
+      const result = [];
+      return new Promise((resolve, reject) => {
+        this.queryApi.queryRows(query, {
+          next: (row, tableMeta) => {
+            const record = tableMeta.toObject(row);
+            result.push(record);
+          },
+          error: (error) => {
+            this.logger.error(
+              `SPC query with fields failed for device ${deviceId}`,
+              error,
+            );
+            reject(error);
+          },
+          complete: () => {
+            this.logger.debug(
+              `SPC query with fields completed for device ${deviceId}, fields: [${fields.join(', ')}], ${result.length} records`,
+            );
+            resolve(result);
+          },
+        });
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to query SPC data with fields for device ${deviceId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async querySPCSeries(
+    deviceId: string,
+    field: string,
+    start: string,
+    end: string,
+    limit: number,
+    order: 'asc' | 'desc',
+  ): Promise<any[]> {
+    const escapedDeviceId = deviceId.replace(/"/g, '"');
+    const query = `
+      from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+        |> range(start: ${start}, stop: ${end})
+        |> filter(fn: (r) => r["_measurement"] == "spc")
+        |> filter(fn: (r) => r["device_id"] == "${escapedDeviceId}")
+        |> filter(fn: (r) => r["_field"] == "${field}")
+        |> sort(columns: ["_time"], desc: ${order === 'desc'})
+        |> limit(n: ${limit})
+    `;
+
+    const result = [];
+    return new Promise((resolve, reject) => {
+      this.queryApi.queryRows(query, {
+        next: (row, tableMeta) => {
+          const record = tableMeta.toObject(row);
+          result.push(record);
+        },
+        error: (error) => {
+          this.logger.error(
+            `SPC series query failed for device ${deviceId}`,
+            error,
+          );
+          reject(error);
+        },
+        complete: () => {
+          this.logger.debug(
+            `SPC series query completed for device ${deviceId}, ${result.length} records`,
+          );
+          resolve(result);
+        },
+      });
+    });
+  }
+
+  async querySPCLimitsAggregated(
+    deviceId: string,
+    timeRange: string,
+    fields: string[],
+  ): Promise<Record<string, { mean: number; stdDev: number; count: number }>> {
+    const escapedDeviceId = deviceId.replace(/"/g, '"');
+    const fieldsFilter = fields
+      .map((f) => `r["_field"] == "${f}"`)
+      .join(' or ');
+
+    const query = `
+      from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+        |> range(start: ${timeRange})
+        |> filter(fn: (r) => r["_measurement"] == "spc")
+        |> filter(fn: (r) => r["device_id"] == "${escapedDeviceId}")
+        |> filter(fn: (r) => ${fieldsFilter})
+        |> group(columns: ["_field"])
+        |> reduce(
+          identity: { count: 0.0, sum: 0.0, sumsq: 0.0 },
+          fn: (r, acc) => ({
+            count: acc.count + 1.0,
+            sum: acc.sum + float(v: r._value),
+            sumsq: acc.sumsq + float(v: r._value) * float(v: r._value)
+          })
+        )
+    `;
+
+    const result: Record<
+      string,
+      { mean: number; stdDev: number; count: number }
+    > = {};
+
+    return new Promise((resolve, reject) => {
+      this.queryApi.queryRows(query, {
+        next: (row, tableMeta) => {
+          const record = tableMeta.toObject(row);
+          const field = record._field as string;
+          const count = record.count || 0;
+          const sum = record.sum || 0;
+          const sumsq = record.sumsq || 0;
+
+          if (count > 1) {
+            const mean = sum / count;
+            const variance = (sumsq - (sum * sum) / count) / (count - 1);
+            const stdDev = Math.sqrt(Math.max(variance, 0));
+            result[field] = { mean, stdDev, count };
+          } else {
+            result[field] = { mean: 0, stdDev: 0, count };
+          }
+        },
+        error: (error) => {
+          this.logger.error(
+            `SPC aggregated query failed for device ${deviceId}`,
+            error,
+          );
+          reject(error);
+        },
+        complete: () => {
+          this.logger.debug(
+            `SPC aggregated query completed for device ${deviceId}, fields: [${fields.join(', ')}]`,
+          );
+          resolve(result);
+        },
+      });
+    });
+  }
+
   async onModuleDestroy() {
     try {
       await this.writeApi?.close();

@@ -4,7 +4,6 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   ManyToOne,
-  Unique,
 } from 'typeorm';
 import { User } from '../../user/entities/user.entity';
 import { Factory } from '../../factories/entities/factory.entity';
@@ -16,10 +15,6 @@ export class Machine {
 
   @Column({ type: 'varchar', length: 255 })
   machineName: string;
-
-  @Column({ type: 'varchar', length: 255 })
-  // @Unique('machine_ip_address', ['machineIpAddress'])
-  machineIpAddress: string;
 
   @Column({ type: 'int' })
   machineIndex: string;

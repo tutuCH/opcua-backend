@@ -74,6 +74,7 @@ export class RedisService implements OnModuleInit {
       } else {
         await this.redis.set(key, serializedValue);
       }
+      this.logger.debug(`Cache set: ${key} (ttl: ${ttl || 'none'})`);
     } catch (error) {
       this.logger.error(`Failed to set cache key: ${key}`, error);
       throw error;
@@ -88,7 +89,12 @@ export class RedisService implements OnModuleInit {
 
     try {
       const value = await this.redis.get(key);
-      return value ? JSON.parse(value) : null;
+      if (!value) {
+        this.logger.debug(`Cache miss: ${key}`);
+        return null;
+      }
+      this.logger.debug(`Cache hit: ${key}`);
+      return JSON.parse(value);
     } catch (error) {
       this.logger.error(`Failed to get cache key: ${key}`, error);
       throw error;
