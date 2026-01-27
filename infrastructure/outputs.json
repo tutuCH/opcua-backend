@@ -1,0 +1,13 @@
+{
+  "OpcuaBackendStack": {
+    "SSHCommand": "ssh ec2-user@44.221.91.204",
+    "ElasticIP": "44.221.91.204",
+    "InstanceId": "i-031be0ff1e8e4195b",
+    "HealthCheckURL": "http://44.221.91.204:3000/health",
+    "WebSocketURL": "ws://44.221.91.204:3000/socket.io/",
+    "BackendURL": "http://44.221.91.204:3000",
+    "StorageSize": "50 GB",
+    "MQTTBroker": "mqtt://44.221.91.204:1883",
+    "InstanceType": "t3.medium"
+  }
+}

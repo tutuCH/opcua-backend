@@ -1,0 +1,577 @@
+{
+ "Resources": {
+  "OpcuaVPC67DDCD31": {
+   "Type": "AWS::EC2::VPC",
+   "Properties": {
+    "CidrBlock": "10.0.0.0/16",
+    "EnableDnsHostnames": true,
+    "EnableDnsSupport": true,
+    "InstanceTenancy": "default",
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "OpcuaBackendStack/OpcuaVPC"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaVPC/Resource"
+   }
+  },
+  "OpcuaVPCPublicSubnet1SubnetDEAACB55": {
+   "Type": "AWS::EC2::Subnet",
+   "Properties": {
+    "AvailabilityZone": "us-east-1a",
+    "CidrBlock": "10.0.0.0/24",
+    "MapPublicIpOnLaunch": true,
+    "Tags": [
+     {
+      "Key": "aws-cdk:subnet-name",
+      "Value": "Public"
+     },
+     {
+      "Key": "aws-cdk:subnet-type",
+      "Value": "Public"
+     },
+     {
+      "Key": "Name",
+      "Value": "OpcuaBackendStack/OpcuaVPC/PublicSubnet1"
+     }
+    ],
+    "VpcId": {
+     "Ref": "OpcuaVPC67DDCD31"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaVPC/PublicSubnet1/Subnet"
+   }
+  },
+  "OpcuaVPCPublicSubnet1RouteTableF1383496": {
+   "Type": "AWS::EC2::RouteTable",
+   "Properties": {
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "OpcuaBackendStack/OpcuaVPC/PublicSubnet1"
+     }
+    ],
+    "VpcId": {
+     "Ref": "OpcuaVPC67DDCD31"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaVPC/PublicSubnet1/RouteTable"
+   }
+  },
+  "OpcuaVPCPublicSubnet1RouteTableAssociationB50A8289": {
+   "Type": "AWS::EC2::SubnetRouteTableAssociation",
+   "Properties": {
+    "RouteTableId": {
+     "Ref": "OpcuaVPCPublicSubnet1RouteTableF1383496"
+    },
+    "SubnetId": {
+     "Ref": "OpcuaVPCPublicSubnet1SubnetDEAACB55"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaVPC/PublicSubnet1/RouteTableAssociation"
+   }
+  },
+  "OpcuaVPCPublicSubnet1DefaultRoute6BFB397D": {
+   "Type": "AWS::EC2::Route",
+   "Properties": {
+    "DestinationCidrBlock": "0.0.0.0/0",
+    "GatewayId": {
+     "Ref": "OpcuaVPCIGW6C7CA301"
+    },
+    "RouteTableId": {
+     "Ref": "OpcuaVPCPublicSubnet1RouteTableF1383496"
+    }
+   },
+   "DependsOn": [
+    "OpcuaVPCVPCGW538B4281"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaVPC/PublicSubnet1/DefaultRoute"
+   }
+  },
+  "OpcuaVPCIGW6C7CA301": {
+   "Type": "AWS::EC2::InternetGateway",
+   "Properties": {
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "OpcuaBackendStack/OpcuaVPC"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaVPC/IGW"
+   }
+  },
+  "OpcuaVPCVPCGW538B4281": {
+   "Type": "AWS::EC2::VPCGatewayAttachment",
+   "Properties": {
+    "InternetGatewayId": {
+     "Ref": "OpcuaVPCIGW6C7CA301"
+    },
+    "VpcId": {
+     "Ref": "OpcuaVPC67DDCD31"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaVPC/VPCGW"
+   }
+  },
+  "OpcuaVPCRestrictDefaultSecurityGroupCustomResource0DDC7C95": {
+   "Type": "Custom::VpcRestrictDefaultSG",
+   "Properties": {
+    "ServiceToken": {
+     "Fn::GetAtt": [
+      "CustomVpcRestrictDefaultSGCustomResourceProviderHandlerDC833E5E",
+      "Arn"
+     ]
+    },
+    "DefaultSecurityGroupId": {
+     "Fn::GetAtt": [
+      "OpcuaVPC67DDCD31",
+      "DefaultSecurityGroup"
+     ]
+    },
+    "Account": "481440170230"
+   },
+   "UpdateReplacePolicy": "Delete",
+   "DeletionPolicy": "Delete",
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaVPC/RestrictDefaultSecurityGroupCustomResource/Default"
+   }
+  },
+  "CustomVpcRestrictDefaultSGCustomResourceProviderRole26592FE0": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Version": "2012-10-17",
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "lambda.amazonaws.com"
+       }
+      }
+     ]
+    },
+    "ManagedPolicyArns": [
+     {
+      "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+     }
+    ],
+    "Policies": [
+     {
+      "PolicyName": "Inline",
+      "PolicyDocument": {
+       "Version": "2012-10-17",
+       "Statement": [
+        {
+         "Effect": "Allow",
+         "Action": [
+          "ec2:AuthorizeSecurityGroupIngress",
+          "ec2:AuthorizeSecurityGroupEgress",
+          "ec2:RevokeSecurityGroupIngress",
+          "ec2:RevokeSecurityGroupEgress"
+         ],
+         "Resource": [
+          {
+           "Fn::Join": [
+            "",
+            [
+             "arn:aws:ec2:us-east-1:481440170230:security-group/",
+             {
+              "Fn::GetAtt": [
+               "OpcuaVPC67DDCD31",
+               "DefaultSecurityGroup"
+              ]
+             }
+            ]
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/Custom::VpcRestrictDefaultSGCustomResourceProvider/Role"
+   }
+  },
+  "CustomVpcRestrictDefaultSGCustomResourceProviderHandlerDC833E5E": {
+   "Type": "AWS::Lambda::Function",
+   "Properties": {
+    "Code": {
+     "S3Bucket": "cdk-hnb659fds-assets-481440170230-us-east-1",
+     "S3Key": "7fa1e366ee8a9ded01fc355f704cff92bfd179574e6f9cfee800a3541df1b200.zip"
+    },
+    "Timeout": 900,
+    "MemorySize": 128,
+    "Handler": "__entrypoint__.handler",
+    "Role": {
+     "Fn::GetAtt": [
+      "CustomVpcRestrictDefaultSGCustomResourceProviderRole26592FE0",
+      "Arn"
+     ]
+    },
+    "Runtime": "nodejs22.x",
+    "Description": "Lambda function for removing all inbound/outbound rules from the VPC default security group"
+   },
+   "DependsOn": [
+    "CustomVpcRestrictDefaultSGCustomResourceProviderRole26592FE0"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/Custom::VpcRestrictDefaultSGCustomResourceProvider/Handler",
+    "aws:asset:path": "asset.7fa1e366ee8a9ded01fc355f704cff92bfd179574e6f9cfee800a3541df1b200",
+    "aws:asset:property": "Code"
+   }
+  },
+  "OpcuaSecurityGroupF576D462": {
+   "Type": "AWS::EC2::SecurityGroup",
+   "Properties": {
+    "GroupDescription": "Security group for OPCUA backend",
+    "SecurityGroupEgress": [
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "Allow all outbound traffic by default",
+      "IpProtocol": "-1"
+     }
+    ],
+    "SecurityGroupIngress": [
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "Allow HTTP",
+      "FromPort": 80,
+      "IpProtocol": "tcp",
+      "ToPort": 80
+     },
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "Allow HTTPS",
+      "FromPort": 443,
+      "IpProtocol": "tcp",
+      "ToPort": 443
+     },
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "Allow Backend API",
+      "FromPort": 3000,
+      "IpProtocol": "tcp",
+      "ToPort": 3000
+     },
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "Allow MQTT",
+      "FromPort": 1883,
+      "IpProtocol": "tcp",
+      "ToPort": 1883
+     },
+     {
+      "CidrIp": "0.0.0.0/0",
+      "Description": "Allow SSH - UPDATE TO YOUR IP!",
+      "FromPort": 22,
+      "IpProtocol": "tcp",
+      "ToPort": 22
+     }
+    ],
+    "VpcId": {
+     "Ref": "OpcuaVPC67DDCD31"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaSecurityGroup/Resource"
+   }
+  },
+  "OpcuaInstanceRoleC27EF276": {
+   "Type": "AWS::IAM::Role",
+   "Properties": {
+    "AssumeRolePolicyDocument": {
+     "Statement": [
+      {
+       "Action": "sts:AssumeRole",
+       "Effect": "Allow",
+       "Principal": {
+        "Service": "ec2.amazonaws.com"
+       }
+      }
+     ],
+     "Version": "2012-10-17"
+    },
+    "ManagedPolicyArns": [
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/CloudWatchAgentServerPolicy"
+       ]
+      ]
+     },
+     {
+      "Fn::Join": [
+       "",
+       [
+        "arn:",
+        {
+         "Ref": "AWS::Partition"
+        },
+        ":iam::aws:policy/AmazonSSMManagedInstanceCore"
+       ]
+      ]
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaInstanceRole/Resource"
+   }
+  },
+  "OpcuaInstanceInstanceProfile09FC6AC3": {
+   "Type": "AWS::IAM::InstanceProfile",
+   "Properties": {
+    "Roles": [
+     {
+      "Ref": "OpcuaInstanceRoleC27EF276"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaInstance/InstanceProfile"
+   }
+  },
+  "OpcuaInstance5E3C8E76": {
+   "Type": "AWS::EC2::Instance",
+   "Properties": {
+    "AvailabilityZone": "us-east-1a",
+    "BlockDeviceMappings": [
+     {
+      "DeviceName": "/dev/xvda",
+      "Ebs": {
+       "DeleteOnTermination": true,
+       "VolumeSize": 50,
+       "VolumeType": "gp3"
+      }
+     }
+    ],
+    "IamInstanceProfile": {
+     "Ref": "OpcuaInstanceInstanceProfile09FC6AC3"
+    },
+    "ImageId": {
+     "Ref": "SsmParameterValueawsserviceamiamazonlinuxlatestal2023amikernel61x8664C96584B6F00A464EAD1953AFF4B05118Parameter"
+    },
+    "InstanceType": "t3.medium",
+    "SecurityGroupIds": [
+     {
+      "Fn::GetAtt": [
+       "OpcuaSecurityGroupF576D462",
+       "GroupId"
+      ]
+     }
+    ],
+    "SubnetId": {
+     "Ref": "OpcuaVPCPublicSubnet1SubnetDEAACB55"
+    },
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "OPCUA Backend"
+     }
+    ],
+    "UserData": {
+     "Fn::Base64": "#!/bin/bash\n#!/bin/bash\nset -e\nexec > >(tee /var/log/user-data.log)\nexec 2>&1\n\necho \"=== Starting OPCUA Backend Setup ===\"\necho \"Timestamp: $(date)\"\n\n# Update system\necho \"Updating system packages...\"\nyum update -y\n\n# Install Docker\necho \"Installing Docker...\"\nyum install -y docker git\nsystemctl start docker\nsystemctl enable docker\nusermod -aG docker ec2-user\n\n# Install Docker Compose\necho \"Installing Docker Compose...\"\ncurl -L \"https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)\" -o /usr/local/bin/docker-compose\nchmod +x /usr/local/bin/docker-compose\nln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose\n\n# Verify installations\necho \"Docker version: $(docker --version)\"\necho \"Docker Compose version: $(docker-compose --version)\"\n\n# Clone repository\necho \"Cloning repository...\"\ncd /opt\ngit clone https://github.com/tutuCH/opcua-backend.git opcua-backend || {\n  echo \"ERROR: Failed to clone repository. Please update the repository URL in the CDK stack.\"\n  echo \"Edit infrastructure/lib/opcua-backend-stack.ts and update the git clone URL.\"\n  exit 1\n}\ncd opcua-backend\n\n# Setup environment files\necho \"Setting up environment files...\"\nif [ -f .env.compose.example ]; then\n  cp .env.compose.example .env.compose\nelif [ -f .env.compose.template ]; then\n  cp .env.compose.template .env.compose\nelse\n  echo \"ERROR: No .env.compose template found\"\n  exit 1\nfi\n\nif [ -f .env.local.example ]; then\n  cp .env.local.example .env.local\nfi\n\n# Generate secure secrets\necho \"Generating secure secrets...\"\nJWT_SECRET=$(openssl rand -base64 48)\nPOSTGRES_PASSWORD=$(openssl rand -base64 24)\nREDIS_PASSWORD=$(openssl rand -base64 24)\nINFLUXDB_PASSWORD=$(openssl rand -base64 24)\nINFLUXDB_TOKEN=$(openssl rand -base64 48)\n\n# Update .env.compose with generated secrets\necho \"Updating environment variables...\"\nsed -i \"s|JWT_SECRET=.*|JWT_SECRET=$JWT_SECRET|\" .env.compose\nsed -i \"s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$POSTGRES_PASSWORD|\" .env.compose\nsed -i \"s|REDIS_PASSWORD=.*|REDIS_PASSWORD=$REDIS_PASSWORD|\" .env.compose\nsed -i \"s|INFLUXDB_PASSWORD=.*|INFLUXDB_PASSWORD=$INFLUXDB_PASSWORD|\" .env.compose\nsed -i \"s|INFLUXDB_TOKEN=.*|INFLUXDB_TOKEN=$INFLUXDB_TOKEN|\" .env.compose\nsed -i \"s|FRONTEND_URL=.*|FRONTEND_URL=https://dashboard.harrytu.cv|\" .env.compose\n\n# Update InfluxDB retention to 30 days\necho \"Configuring InfluxDB retention to 30 days...\"\nsed -i \"s|DOCKER_INFLUXDB_INIT_RETENTION:.*|DOCKER_INFLUXDB_INIT_RETENTION: 720h|\" docker-compose.yml\n\n# Start services\necho \"Starting Docker Compose services...\"\ndocker-compose up -d\n\n# Wait for services to be healthy\necho \"Waiting for services to initialize...\"\nsleep 30\n\n# Check service status\necho \"Service status:\"\ndocker-compose ps\n\n# Create systemd service for auto-restart\necho \"Creating systemd service...\"\ncat > /etc/systemd/system/opcua-backend.service <<EOF\n[Unit]\nDescription=OPCUA Backend Docker Compose\nAfter=docker.service\nRequires=docker.service\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\nWorkingDirectory=/opt/opcua-backend\nExecStart=/usr/local/bin/docker-compose up -d\nExecStop=/usr/local/bin/docker-compose down\n\n[Install]\nWantedBy=multi-user.target\nEOF\n\nsystemctl daemon-reload\nsystemctl enable opcua-backend\n\necho \"=== OPCUA Backend Setup Complete ===\"\necho \"Timestamp: $(date)\"\necho \"Check service status: docker-compose ps\"\necho \"View logs: docker-compose logs -f\""
+    }
+   },
+   "DependsOn": [
+    "OpcuaInstanceRoleC27EF276"
+   ],
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaInstance/Resource"
+   }
+  },
+  "OpcuaElasticIP": {
+   "Type": "AWS::EC2::EIP",
+   "Properties": {
+    "Domain": "vpc",
+    "Tags": [
+     {
+      "Key": "Name",
+      "Value": "OPCUA Backend Static IP"
+     }
+    ]
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/OpcuaElasticIP"
+   }
+  },
+  "EIPAssociation": {
+   "Type": "AWS::EC2::EIPAssociation",
+   "Properties": {
+    "EIP": {
+     "Ref": "OpcuaElasticIP"
+    },
+    "InstanceId": {
+     "Ref": "OpcuaInstance5E3C8E76"
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/EIPAssociation"
+   }
+  },
+  "CDKMetadata": {
+   "Type": "AWS::CDK::Metadata",
+   "Properties": {
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/21R0W7DIAz8lr0TtiZf0FVTladGydTXySFu5zaBCEyrKsq/D9Z0bNKefHf47ANymReFfHmCq8tUd856auXUMKizCNLHhCqX035UYnPQ+2ojKt/2pBrfauSoJVQbz/gObY9JT9raOaMImIz+aY6g1Iw2dG6B8Qq3Zc3C1hyCfA6oWTSovCW+ba3x4/eCP0KpHYNWy8iE38pqKb8CzIJgkFNt7lEf9eGrrDlQj/MsanTG2zjJOzZDosH0/1HwXqhD+woORViJHN7ySPoYPRVYGDDcN5Kd59HzLLTpUJ7c8yUv5GoVfuLkiDLrNdOAsr7XL/maOtqmAQAA"
+   },
+   "Metadata": {
+    "aws:cdk:path": "OpcuaBackendStack/CDKMetadata/Default"
+   }
+  }
+ },
+ "Parameters": {
+  "SsmParameterValueawsserviceamiamazonlinuxlatestal2023amikernel61x8664C96584B6F00A464EAD1953AFF4B05118Parameter": {
+   "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+   "Default": "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64"
+  },
+  "BootstrapVersion": {
+   "Type": "AWS::SSM::Parameter::Value<String>",
+   "Default": "/cdk-bootstrap/hnb659fds/version",
+   "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]"
+  }
+ },
+ "Outputs": {
+  "ElasticIP": {
+   "Description": "Static IP address for backend",
+   "Value": {
+    "Ref": "OpcuaElasticIP"
+   },
+   "Export": {
+    "Name": "OpcuaBackendElasticIP"
+   }
+  },
+  "InstanceId": {
+   "Description": "EC2 Instance ID",
+   "Value": {
+    "Ref": "OpcuaInstance5E3C8E76"
+   }
+  },
+  "BackendURL": {
+   "Description": "Backend API URL",
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      "http://",
+      {
+       "Ref": "OpcuaElasticIP"
+      },
+      ":3000"
+     ]
+    ]
+   }
+  },
+  "HealthCheckURL": {
+   "Description": "Health check endpoint",
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      "http://",
+      {
+       "Ref": "OpcuaElasticIP"
+      },
+      ":3000/health"
+     ]
+    ]
+   }
+  },
+  "MQTTBroker": {
+   "Description": "MQTT Broker URL for devices",
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      "mqtt://",
+      {
+       "Ref": "OpcuaElasticIP"
+      },
+      ":1883"
+     ]
+    ]
+   }
+  },
+  "WebSocketURL": {
+   "Description": "WebSocket URL for real-time updates",
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      "ws://",
+      {
+       "Ref": "OpcuaElasticIP"
+      },
+      ":3000/socket.io/"
+     ]
+    ]
+   }
+  },
+  "SSHCommand": {
+   "Description": "SSH command to connect to instance",
+   "Value": {
+    "Fn::Join": [
+     "",
+     [
+      "ssh ec2-user@",
+      {
+       "Ref": "OpcuaElasticIP"
+      }
+     ]
+    ]
+   }
+  },
+  "InstanceType": {
+   "Description": "EC2 instance type",
+   "Value": "t3.medium"
+  },
+  "StorageSize": {
+   "Description": "EBS storage size",
+   "Value": "50 GB"
+  }
+ },
+ "Rules": {
+  "CheckBootstrapVersion": {
+   "Assertions": [
+    {
+     "Assert": {
+      "Fn::Not": [
+       {
+        "Fn::Contains": [
+         [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5"
+         ],
+         {
+          "Ref": "BootstrapVersion"
+         }
+        ]
+       }
+      ]
+     },
+     "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+    }
+   ]
+  }
+ }
+}

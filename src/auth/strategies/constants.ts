@@ -1,4 +1,9 @@
 import { config } from 'dotenv';
+
+// Load environment variables from .env file
+// NOTE: The .env file is a symlink to .env.local
+// This is required for backwards compatibility with jwt-decoder.util.ts
+// which cannot use dependency injection
 config();
 
 export const jwtConstants = {

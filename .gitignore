@@ -63,3 +63,5 @@ deployment-info.txt
 opcua-demo-key.pem
 scripts/.deploy_state
 scripts/.user-data-compose.sh
+infrastructure/node_modules
+opcua-backend-key.pem

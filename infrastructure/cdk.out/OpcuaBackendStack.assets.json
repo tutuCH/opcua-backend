@@ -1,0 +1,36 @@
+{
+  "version": "48.0.0",
+  "files": {
+    "7fa1e366ee8a9ded01fc355f704cff92bfd179574e6f9cfee800a3541df1b200": {
+      "displayName": "OpcuaBackendStack/Custom::VpcRestrictDefaultSGCustomResourceProvider Code",
+      "source": {
+        "path": "asset.7fa1e366ee8a9ded01fc355f704cff92bfd179574e6f9cfee800a3541df1b200",
+        "packaging": "zip"
+      },
+      "destinations": {
+        "481440170230-us-east-1-5bc2416b": {
+          "bucketName": "cdk-hnb659fds-assets-481440170230-us-east-1",
+          "objectKey": "7fa1e366ee8a9ded01fc355f704cff92bfd179574e6f9cfee800a3541df1b200.zip",
+          "region": "us-east-1",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::481440170230:role/cdk-hnb659fds-file-publishing-role-481440170230-us-east-1"
+        }
+      }
+    },
+    "a980ad9508c4849bf9ffb0cf36bd1e6ad729905c62753d311a7b41dcea7def4c": {
+      "displayName": "OpcuaBackendStack Template",
+      "source": {
+        "path": "OpcuaBackendStack.template.json",
+        "packaging": "file"
+      },
+      "destinations": {
+        "481440170230-us-east-1-205b5e2f": {
+          "bucketName": "cdk-hnb659fds-assets-481440170230-us-east-1",
+          "objectKey": "a980ad9508c4849bf9ffb0cf36bd1e6ad729905c62753d311a7b41dcea7def4c.json",
+          "region": "us-east-1",
+          "assumeRoleArn": "arn:${AWS::Partition}:iam::481440170230:role/cdk-hnb659fds-file-publishing-role-481440170230-us-east-1"
+        }
+      }
+    }
+  },
+  "dockerImages": {}
+}
