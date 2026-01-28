@@ -395,23 +395,11 @@ export class MachinesController {
     @Query('forceRecalculate') forceRecalculate?: string,
   ) {
     try {
-      const machineId = parseInt(id, 10);
+      await this.machinesService.findOneForUser(+id, userId);
 
-      if (isNaN(machineId)) {
-        throw new HttpException(
-          `Invalid machine ID: "${id}". Please use numeric ID (e.g., 1). Available machines: /machines/factories-machines`,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      await this.machinesService.findOneForUser(machineId, userId);
-
-      const machine = await this.machinesService.findOne(machineId);
+      const machine = await this.machinesService.findOne(+id);
       if (!machine) {
-        throw new HttpException(
-          `Machine with ID ${machineId} not found. Available machines: /machines/factories-machines`,
-          HttpStatus.NOT_FOUND,
-        );
+        throw new HttpException('Machine not found', HttpStatus.NOT_FOUND);
       }
 
       if (!fields) {
@@ -426,14 +414,10 @@ export class MachinesController {
       const sigmaValue = sigma ? parseInt(sigma) : 3;
       const forceRecalc = forceRecalculate === 'true';
 
-      const timeRange = lookback?.startsWith('-')
-        ? lookback
-        : `-${lookback || '24h'}`;
-
       const result = await this.spcLimitsService.getLimits(
         machine.machineName,
         fieldsArray,
-        timeRange,
+        lookback || '24h',
         sigmaValue,
         forceRecalc,
       );
@@ -458,23 +442,11 @@ export class MachinesController {
     @Query('count') count?: string,
   ) {
     try {
-      const machineId = parseInt(id, 10);
+      await this.machinesService.findOneForUser(+id, userId);
 
-      if (isNaN(machineId)) {
-        throw new HttpException(
-          `Invalid machine ID: "${id}". Please use numeric ID (e.g., 1). Available machines: /machines/factories-machines`,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      await this.machinesService.findOneForUser(machineId, userId);
-
-      const machine = await this.machinesService.findOne(machineId);
+      const machine = await this.machinesService.findOne(+id);
       if (!machine) {
-        throw new HttpException(
-          `Machine with ID ${machineId} not found. Available machines: /machines/factories-machines`,
-          HttpStatus.NOT_FOUND,
-        );
+        throw new HttpException('Machine not found', HttpStatus.NOT_FOUND);
       }
 
       const countValue = count ? parseInt(count) : 10;
@@ -510,23 +482,11 @@ export class MachinesController {
     @Query('count') count?: string,
   ) {
     try {
-      const machineId = parseInt(id, 10);
+      await this.machinesService.findOneForUser(+id, userId);
 
-      if (isNaN(machineId)) {
-        throw new HttpException(
-          `Invalid machine ID: "${id}". Please use numeric ID (e.g., 1). Available machines: /machines/factories-machines`,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      await this.machinesService.findOneForUser(machineId, userId);
-
-      const machine = await this.machinesService.findOne(machineId);
+      const machine = await this.machinesService.findOne(+id);
       if (!machine) {
-        throw new HttpException(
-          `Machine with ID ${machineId} not found. Available machines: /machines/factories-machines`,
-          HttpStatus.NOT_FOUND,
-        );
+        throw new HttpException('Machine not found', HttpStatus.NOT_FOUND);
       }
 
       const countValue = count ? parseInt(count) : 10;
@@ -563,24 +523,13 @@ export class MachinesController {
     @Query('fields') fields?: string,
     @Query('step') step?: string,
   ) {
+    const startTime = Date.now();
     try {
-      const machineId = parseInt(id, 10);
+      await this.machinesService.findOneForUser(+id, userId);
 
-      if (isNaN(machineId)) {
-        throw new HttpException(
-          `Invalid machine ID: "${id}". Please use numeric ID (e.g., 1). Available machines: /machines/factories-machines`,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      await this.machinesService.findOneForUser(machineId, userId);
-
-      const machine = await this.machinesService.findOne(machineId);
+      const machine = await this.machinesService.findOne(+id);
       if (!machine) {
-        throw new HttpException(
-          `Machine with ID ${machineId} not found. Available machines: /machines/factories-machines`,
-          HttpStatus.NOT_FOUND,
-        );
+        throw new HttpException('Machine not found', HttpStatus.NOT_FOUND);
       }
 
       if (!from || !to) {
@@ -597,7 +546,6 @@ export class MachinesController {
         this.validateSPCFields(fieldsArray);
       }
 
-      const startTime = Date.now();
       const data =
         await this.influxDbService.querySPCDataWithIntelligentDownsampling(
           machine.machineName,

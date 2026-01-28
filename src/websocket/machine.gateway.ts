@@ -318,6 +318,26 @@ export class MachineGateway
     );
   }
 
+  broadcastAlarmUpdate(deviceId: string, data: any) {
+    const room = `machine-${deviceId}`;
+
+    const payload = {
+      deviceId,
+      alarm: {
+        id: data.Data.wmId,
+        message: data.Data.wmMsg,
+        timestamp: data.Data.wmTime,
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    this.server.to(room).emit('alarm-update', payload);
+
+    this.logger.log(
+      `🚨 Broadcasted alarm update for device ${deviceId}: ${data.Data.wmMsg}`,
+    );
+  }
+
   // Subscribe to Redis pub/sub channels for real-time updates
   private async subscribeToRedisChannels() {
     try {
@@ -340,6 +360,12 @@ export class MachineGateway
       await this.redisService.subscribe('machine:alerts', (message) => {
         const { deviceId, alert } = message;
         this.broadcastMachineAlert(deviceId, alert);
+      });
+
+      // Subscribe to alarm/warning messages
+      await this.redisService.subscribe('mqtt:wm:processed', (message) => {
+        const { deviceId, data } = message;
+        this.broadcastAlarmUpdate(deviceId, data);
       });
 
       this.logger.log('Subscribed to Redis channels for real-time updates');

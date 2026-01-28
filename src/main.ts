@@ -15,18 +15,20 @@ async function bootstrap() {
   });
 
   // Enable compression for responses (gzip/deflate)
-  app.use(compression({
-    level: 6, // Balance between compression speed and ratio
-    threshold: 1024, // Only compress responses larger than 1KB
-    filter: (req, res) => {
-      // Don't compress WebSocket responses
-      if (req.headers.upgrade) {
-        return false;
-      }
-      // Use default compression filter for other responses
-      return compression.filter(req, res);
-    },
-  }));
+  app.use(
+    compression({
+      level: 6, // Balance between compression speed and ratio
+      threshold: 1024, // Only compress responses larger than 1KB
+      filter: (req, res) => {
+        // Don't compress WebSocket responses
+        if (req.headers.upgrade) {
+          return false;
+        }
+        // Use default compression filter for other responses
+        return compression.filter(req, res);
+      },
+    }),
+  );
 
   // Get configuration service
   const configService = app.get(ConfigService);
@@ -38,8 +40,12 @@ async function bootstrap() {
   const corsOrigins = [
     'http://localhost:3030',
     'http://localhost:3031',
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:4173',
     'http://localhost:3000', // For WebSocket testing
     'https://opcua-frontend.vercel.app',
+    'https://dashboard.harrytu.cv', // Production frontend
   ];
 
   if (frontendUrl && !corsOrigins.includes(frontendUrl)) {
@@ -83,7 +89,9 @@ async function bootstrap() {
   logger.log(
     `📊 WebSocket events: subscribe-machine, realtime-update, spc-update, machine-alert`,
   );
-  logger.log(`📈 Historical data API: REST endpoints with pagination and streaming`);
+  logger.log(
+    `📈 Historical data API: REST endpoints with pagination and streaming`,
+  );
   logger.log(`🗜️ Response compression: Enabled (gzip/deflate, 1KB+ threshold)`);
 
   // Log demo-specific information

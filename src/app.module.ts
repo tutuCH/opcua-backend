@@ -26,7 +26,6 @@ import { HealthModule } from './health/health.module';
 import { DemoModule } from './demo/demo.module';
 import { DebugModule } from './debug/debug.module';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { SPCSeriesModule } from './spc-series/spc-series.module';
 @Module({
   imports: [
     // Configuration Module (global)

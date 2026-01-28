@@ -1,17 +1,20 @@
 import { config } from 'dotenv';
+import * as path from 'path';
 
-// Load environment variables from .env file
-// NOTE: The .env file is a symlink to .env.local
-// This is required for backwards compatibility with jwt-decoder.util.ts
-// which cannot use dependency injection
-config();
+// Load environment variables from .env.local
+config({ path: path.resolve(process.cwd(), '.env.local') });
 
 export const jwtConstants = {
-  secret: process.env.JWT_SECRET,
+  secret: process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production',
 };
 
 export const frontendUrl = process.env.FRONTEND_URL;
 
 export const emailAddress = process.env.EMAIL_ADDRESS;
 
-export const emailPassword = process.env.EMAIL_PASSWORD;
+export const emailPassword = (
+  process.env.EMAIL_PASSWORD ?? process.env.EMAIL_APP_PASSWORD
+)?.replace(/\s+/g, '');
+
+export const emailSendEnabled =
+  process.env.EMAIL_SEND_ENABLED?.toLowerCase() !== 'false';

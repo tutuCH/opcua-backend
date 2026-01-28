@@ -1,0 +1,54 @@
+<mjml>
+  <mj-head>
+    <mj-title>Verify Your Email Address</mj-title>
+    <mj-font name="Roboto" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" />
+    <mj-preview>Complete your registration by verifying your email</mj-preview>
+    <mj-attributes>
+      <mj-all font-family="Roboto, Helvetica, Arial, sans-serif" />
+      <mj-section background-color="#ffffff" />
+      <mj-column padding="0" />
+      <mj-text padding="0" />
+    </mj-attributes>
+    <mj-style>
+      .button { text-decoration: none; display: inline-block; }
+    </mj-style>
+  </mj-head>
+  <mj-body background-color="#f4f6f8">
+    <mj-section background-color="#ffffff" padding="40px 20px">
+      <mj-column>
+        <mj-text font-size="24px" font-weight="bold" color="#333333" align="center" padding-bottom="20px">
+          Verify Your Email Address
+        </mj-text>
+        <mj-text font-size="16px" color="#666666" align="center" padding-bottom="30px" line-height="1.6">
+          Hi {{username}},
+        </mj-text>
+        <mj-text font-size="16px" color="#666666" align="center" padding-bottom="30px" line-height="1.6">
+          Thank you for registering! Please verify your email address to complete your registration.
+        </mj-text>
+        <mj-button href="{{verificationLink}}" background-color="#4F46E5" color="#ffffff" font-size="16px" font-weight="bold" padding="15px 40px" border-radius="6px" align="center" css-class="button">
+          Verify Email Address
+        </mj-button>
+        <mj-text font-size="14px" color="#999999" align="center" padding-top="30px" line-height="1.6">
+          Or copy and paste this link into your browser:
+        </mj-text>
+        <mj-text font-size="12px" color="#4F46E5" align="center" padding="10px 20px" line-height="1.4">
+          {{verificationLink}}
+        </mj-text>
+        <mj-text font-size="14px" color="#999999" align="center" padding-top="20px" line-height="1.6">
+          This link will expire in 24 hours.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#f4f6f8" padding="20px">
+      <mj-column>
+        <mj-text font-size="12px" color="#999999" align="center" padding="0" line-height="1.5">
+          If you didn't create an account, you can safely ignore this email.
+        </mj-text>
+        <mj-text font-size="12px" color="#999999" align="center" padding="10px 0 0 0" line-height="1.5">
+          &copy; 2026 OPC UA Dashboard. All rights reserved.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

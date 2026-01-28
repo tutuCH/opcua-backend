@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { User } from '../user/entities/user.entity';
 import { UserSubscription } from './entities/user-subscription.entity';
+import { WebhookEvent } from './entities/webhook-event.entity';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import { CreatePortalSessionDto } from './dto/create-portal-session.dto';
 
@@ -25,6 +26,8 @@ export class BillingSubscriptionService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(UserSubscription)
     private readonly subscriptionRepository: Repository<UserSubscription>,
+    @InjectRepository(WebhookEvent)
+    private readonly webhookEventRepository: Repository<WebhookEvent>,
     private readonly configService: ConfigService,
   ) {
     this.isProduction =
@@ -142,6 +145,111 @@ export class BillingSubscriptionService {
     }
   }
 
+  private getConfiguredPlanKey(): string | null {
+    const configuredPriceId =
+      this.configService.get<string>('stripe.planPriceId');
+    if (configuredPriceId) {
+      return configuredPriceId;
+    }
+
+    const configuredLookupKey = this.configService.get<string>(
+      'stripe.planLookupKey',
+    );
+    return configuredLookupKey || null;
+  }
+
+  private selectSinglePlanPrice(prices: Stripe.Price[]): Stripe.Price | null {
+    if (!prices.length) {
+      return null;
+    }
+
+    const configuredPriceId =
+      this.configService.get<string>('stripe.planPriceId');
+    if (configuredPriceId) {
+      const priceMatch = prices.find((price) => price.id === configuredPriceId);
+      if (priceMatch) {
+        return priceMatch;
+      }
+      this.logger.warn(
+        `Configured stripe.planPriceId ${configuredPriceId} not found among active prices`,
+      );
+    }
+
+    const configuredLookupKey = this.configService.get<string>(
+      'stripe.planLookupKey',
+    );
+    if (configuredLookupKey) {
+      const lookupMatch = prices.find(
+        (price) => price.lookup_key === configuredLookupKey,
+      );
+      if (lookupMatch) {
+        return lookupMatch;
+      }
+      this.logger.warn(
+        `Configured stripe.planLookupKey ${configuredLookupKey} not found among active prices`,
+      );
+    }
+
+    const primaryPrice = prices.find((price) => {
+      if (price.metadata?.primary_plan === 'true') {
+        return true;
+      }
+      const product =
+        typeof price.product === 'string'
+          ? null
+          : (price.product as Stripe.Product);
+      return product?.metadata?.primary_plan === 'true';
+    });
+
+    if (primaryPrice) {
+      return primaryPrice;
+    }
+
+    const [latestPrice] = [...prices].sort((a, b) => b.created - a.created);
+    return latestPrice ?? null;
+  }
+
+  private isEligiblePlanPrice(price: Stripe.Price): boolean {
+    if (!price.recurring) {
+      return false;
+    }
+
+    if (price.active === false) {
+      return false;
+    }
+
+    const product =
+      typeof price.product === 'string'
+        ? null
+        : (price.product as Stripe.Product);
+
+    if (product && product.active === false) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private mapStripePriceToPlan(price: Stripe.Price) {
+    const product =
+      typeof price.product === 'string'
+        ? null
+        : (price.product as Stripe.Product);
+
+    return {
+      id: price.lookup_key || price.id,
+      name: product?.name || 'Unknown Plan',
+      description: product?.description || '',
+      price: price.unit_amount ? price.unit_amount / 100 : 0,
+      currency: price.currency?.toUpperCase() || 'USD',
+      interval: price.recurring?.interval || 'month',
+      features: product?.metadata?.features
+        ? JSON.parse(product.metadata.features)
+        : [],
+      popular: product?.metadata?.popular === 'true',
+    };
+  }
+
   async createCheckoutSession(
     createCheckoutSessionDto: CreateCheckoutSessionDto,
     userId: number,
@@ -163,7 +271,28 @@ export class BillingSubscriptionService {
     }
 
     try {
-      const { lookupKey, successUrl, cancelUrl } = createCheckoutSessionDto;
+      const {
+        lookupKey: requestedLookupKey,
+        successUrl,
+        cancelUrl,
+      } = createCheckoutSessionDto;
+      const configuredPlanKey = this.getConfiguredPlanKey();
+      const lookupKey = configuredPlanKey || requestedLookupKey;
+
+      if (!lookupKey) {
+        throw new BadRequestException('No plan configured');
+      }
+
+      if (
+        configuredPlanKey &&
+        requestedLookupKey &&
+        requestedLookupKey !== configuredPlanKey
+      ) {
+        this.logger.warn(
+          `Requested lookup key ${requestedLookupKey} ignored; using configured plan ${configuredPlanKey}`,
+        );
+      }
+
       this.logger.log(
         `Creating checkout session for user ${userId} with lookup key ${lookupKey}`,
       );
@@ -205,6 +334,10 @@ export class BillingSubscriptionService {
         }
 
         price = prices.data[0];
+      }
+
+      if (!this.isEligiblePlanPrice(price)) {
+        throw new BadRequestException('Selected plan is not active');
       }
 
       // Get user details
@@ -394,61 +527,154 @@ export class BillingSubscriptionService {
       return { subscription: null };
     }
 
+    const user = await this.userRepository.findOne({ where: { userId } });
+
+    if (!user) {
+      this.logger.warn(`User not found: ${userId}`);
+      return { subscription: null };
+    }
+
     const subscription = await this.subscriptionRepository.findOne({
       where: { userId },
     });
 
+    let shouldCheckStripeDirectly = !subscription?.stripeSubscriptionId;
+
     // If we have local subscription data, use it
-    if (subscription && subscription.stripeSubscriptionId) {
-      try {
-        // Fetch latest subscription data from Stripe
-        const stripeSubscription = await this.stripe.subscriptions.retrieve(
-          subscription.stripeSubscriptionId,
-          { expand: ['items.data.price.product'] },
+    if (subscription?.stripeSubscriptionId) {
+      if (
+        subscription.stripeCustomerId &&
+        user.stripeCustomerId &&
+        subscription.stripeCustomerId !== user.stripeCustomerId
+      ) {
+        this.logger.warn(
+          `Local subscription ${subscription.stripeSubscriptionId} belongs to a different Stripe customer, syncing from Stripe`,
         );
+        shouldCheckStripeDirectly = true;
+      } else {
+        try {
+          // Fetch latest subscription data from Stripe
+          const stripeSubscription = await this.stripe.subscriptions.retrieve(
+            subscription.stripeSubscriptionId,
+            { expand: ['items.data.price.product'] },
+          );
 
-        const price = stripeSubscription.items.data[0]?.price;
-        const product = price?.product as Stripe.Product;
+          const price = stripeSubscription.items.data[0]?.price;
+          const product = price?.product as Stripe.Product;
 
-        const firstItem = stripeSubscription.items.data[0];
-        console.log('🔍 Stripe subscription periods:', {
-          current_period_start: firstItem?.current_period_start,
-          current_period_end: firstItem?.current_period_end,
-          start_date: firstItem
-            ? new Date(firstItem.current_period_start * 1000)
-            : null,
-          end_date: firstItem
-            ? new Date(firstItem.current_period_end * 1000)
-            : null,
-        });
+          const firstItem = stripeSubscription.items.data[0];
+          this.logger.debug('Stripe subscription periods:', {
+            current_period_start: firstItem?.current_period_start,
+            current_period_end: firstItem?.current_period_end,
+            start_date: firstItem
+              ? new Date(firstItem.current_period_start * 1000)
+              : null,
+            end_date: firstItem
+              ? new Date(firstItem.current_period_end * 1000)
+              : null,
+          });
 
-        return {
-          subscription: {
-            id: stripeSubscription.id,
-            status: stripeSubscription.status,
-            plan: {
-              id: price?.lookup_key || subscription.planLookupKey,
-              name: product?.name || 'Unknown Plan',
-              price: price ? price.unit_amount / 100 : 0,
-              currency: price?.currency?.toUpperCase() || 'USD',
-              interval: price?.recurring?.interval || 'month',
+          // If subscription is canceled, check for any active subscriptions
+          if (stripeSubscription.status === 'canceled') {
+            this.logger.log(
+              `Local subscription ${subscription.stripeSubscriptionId} is canceled, checking for active subscriptions...`,
+            );
+
+            if (user.stripeCustomerId) {
+              const activeSubscriptions = await this.stripe.subscriptions.list({
+                customer: user.stripeCustomerId,
+                status: 'active',
+                expand: ['data.items.data.price.product'],
+              });
+
+              if (activeSubscriptions.data.length > 0) {
+                // Found an active subscription, update local record and return it
+                const activeStripeSubscription = activeSubscriptions.data[0];
+                const activePrice =
+                  activeStripeSubscription.items.data[0]?.price;
+                const activeProduct = activePrice?.product as Stripe.Product;
+                const activeFirstItem = activeStripeSubscription.items.data[0];
+
+                this.logger.log(
+                  `Found active subscription ${activeStripeSubscription.id}, syncing to database`,
+                );
+
+                // Update local subscription record with active subscription
+                await this.updateUserSubscription(userId, {
+                  stripeSubscriptionId: activeStripeSubscription.id,
+                  stripeCustomerId: user.stripeCustomerId,
+                  planLookupKey:
+                    activePrice?.lookup_key || activeStripeSubscription.id,
+                  status: activeStripeSubscription.status,
+                  currentPeriodStart: activeFirstItem
+                    ? new Date(activeFirstItem.current_period_start * 1000)
+                    : null,
+                  currentPeriodEnd: activeFirstItem
+                    ? new Date(activeFirstItem.current_period_end * 1000)
+                    : null,
+                });
+
+                return {
+                  subscription: {
+                    id: activeStripeSubscription.id,
+                    status: activeStripeSubscription.status,
+                    plan: {
+                      id:
+                        activePrice?.lookup_key || activeStripeSubscription.id,
+                      name: activeProduct?.name || 'Unknown Plan',
+                      price: activePrice ? activePrice.unit_amount / 100 : 0,
+                      currency: activePrice?.currency?.toUpperCase() || 'USD',
+                      interval: activePrice?.recurring?.interval || 'month',
+                    },
+                    currentPeriodStart: activeFirstItem?.current_period_start,
+                    currentPeriodEnd: activeFirstItem?.current_period_end,
+                    cancelAtPeriodEnd:
+                      activeStripeSubscription.cancel_at_period_end,
+                  },
+                };
+              }
+            }
+          }
+
+          return {
+            subscription: {
+              id: stripeSubscription.id,
+              status: stripeSubscription.status,
+              plan: {
+                id: price?.lookup_key || subscription.planLookupKey,
+                name: product?.name || 'Unknown Plan',
+                price: price ? price.unit_amount / 100 : 0,
+                currency: price?.currency?.toUpperCase() || 'USD',
+                interval: price?.recurring?.interval || 'month',
+              },
+              currentPeriodStart: firstItem?.current_period_start,
+              currentPeriodEnd: firstItem?.current_period_end,
+              cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
             },
-            currentPeriodStart: firstItem?.current_period_start,
-            currentPeriodEnd: firstItem?.current_period_end,
-            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
-          },
-        };
-      } catch (error) {
-        this.logger.error('Error fetching subscription from Stripe:', error);
-        return { subscription: null };
+          };
+        } catch (error) {
+          this.logger.error(
+            `Error fetching subscription from Stripe for user ${userId}:`,
+            {
+              message: error.message,
+              type: error.type,
+              statusCode: error.statusCode,
+              code: error.code,
+              stack: error.stack,
+            },
+          );
+          shouldCheckStripeDirectly = true;
+        }
       }
     }
 
-    // If no local subscription data, check Stripe directly using the user's stripeCustomerId
-    try {
-      const user = await this.userRepository.findOne({ where: { userId } });
+    if (!shouldCheckStripeDirectly) {
+      return { subscription: null };
+    }
 
-      if (!user || !user.stripeCustomerId) {
+    // If no local subscription data or local data is stale, check Stripe directly using the user's stripeCustomerId
+    try {
+      if (!user.stripeCustomerId) {
         this.logger.log(`No Stripe customer ID found for user ${userId}`);
         return { subscription: null };
       }
@@ -517,7 +743,16 @@ export class BillingSubscriptionService {
         },
       };
     } catch (error) {
-      this.logger.error('Error fetching subscription from Stripe:', error);
+      this.logger.error(
+        `Error fetching subscription from Stripe for user ${userId} (no local subscription):`,
+        {
+          message: error.message,
+          type: error.type,
+          statusCode: error.statusCode,
+          code: error.code,
+          stack: error.stack,
+        },
+      );
       return { subscription: null };
     }
   }
@@ -526,7 +761,7 @@ export class BillingSubscriptionService {
     this.logger.log('Getting subscription plans from Stripe');
 
     if (!this.stripe) {
-      this.logger.log('Stripe not configured - returning demo plans');
+      this.logger.log('Stripe not configured - returning demo plan');
       return {
         plans: [
           {
@@ -537,35 +772,6 @@ export class BillingSubscriptionService {
             currency: 'USD',
             interval: 'month',
             features: ['Up to 5 machines', 'Basic monitoring', 'Email support'],
-          },
-          {
-            id: 'professional_monthly',
-            name: 'Professional',
-            description: 'Best for growing businesses',
-            price: 29.99,
-            currency: 'USD',
-            interval: 'month',
-            features: [
-              'Up to 50 machines',
-              'Advanced monitoring',
-              'Real-time alerts',
-              'Priority support',
-            ],
-            popular: true,
-          },
-          {
-            id: 'enterprise_monthly',
-            name: 'Enterprise',
-            description: 'For large scale operations',
-            price: 99.99,
-            currency: 'USD',
-            interval: 'month',
-            features: [
-              'Unlimited machines',
-              'Custom integrations',
-              'Dedicated support',
-              'SLA guarantee',
-            ],
           },
         ],
       };
@@ -578,28 +784,22 @@ export class BillingSubscriptionService {
         active: true,
       });
 
-      const plans = prices.data
-        .filter((price) => price.recurring) // Temporarily remove lookup_key requirement
-        .map((price) => {
-          const product = price.product as Stripe.Product;
-          return {
-            id: price.lookup_key || price.id, // Use price ID if no lookup key
-            name: product.name,
-            description: product.description || '',
-            price: price.unit_amount / 100,
-            currency: price.currency.toUpperCase(),
-            interval: price.recurring.interval,
-            features: product.metadata?.features
-              ? JSON.parse(product.metadata.features)
-              : [],
-            popular: product.metadata?.popular === 'true',
-          };
-        });
+      const eligiblePrices = prices.data.filter((price) =>
+        this.isEligiblePlanPrice(price),
+      );
+      const selectedPrice = this.selectSinglePlanPrice(eligiblePrices);
 
-      return { plans };
+      if (!selectedPrice) {
+        this.logger.warn('No active recurring prices found in Stripe');
+        return { plans: [] };
+      }
+
+      const plan = this.mapStripePriceToPlan(selectedPrice);
+
+      return { plans: [plan] };
     } catch (error) {
       this.logger.error('Error fetching subscription plans:', error);
-      // Fallback to hardcoded plans if Stripe is unavailable
+      // Fallback to hardcoded plan if Stripe is unavailable
       return {
         plans: [
           {
@@ -610,35 +810,6 @@ export class BillingSubscriptionService {
             currency: 'USD',
             interval: 'month',
             features: ['Up to 5 machines', 'Basic monitoring', 'Email support'],
-          },
-          {
-            id: 'professional_monthly',
-            name: 'Professional',
-            description: 'Best for growing businesses',
-            price: 29.99,
-            currency: 'USD',
-            interval: 'month',
-            features: [
-              'Up to 50 machines',
-              'Advanced monitoring',
-              'Real-time alerts',
-              'Priority support',
-            ],
-            popular: true,
-          },
-          {
-            id: 'enterprise_monthly',
-            name: 'Enterprise',
-            description: 'For large scale operations',
-            price: 99.99,
-            currency: 'USD',
-            interval: 'month',
-            features: [
-              'Unlimited machines',
-              'Custom integrations',
-              'Dedicated support',
-              'SLA guarantee',
-            ],
           },
         ],
       };
@@ -877,10 +1048,33 @@ export class BillingSubscriptionService {
   }
 
   async handleWebhookEvent(event: Stripe.Event) {
+    const eventId = event.id;
+
+    // Check if event was already processed (idempotency)
+    const existingEvent = await this.webhookEventRepository.findOne({
+      where: { eventId },
+    });
+
+    if (existingEvent) {
+      this.logger.log(`Event ${eventId} already processed, skipping`);
+      return;
+    }
+
+    // Store event before processing
+    await this.webhookEventRepository.save({
+      eventId,
+      eventType: event.type,
+      processed: false,
+    });
+
     this.logger.log(`Processing webhook event: ${event.type} - ${event.id}`);
 
     if (!this.stripe) {
       this.logger.warn('Stripe not configured - ignoring webhook event');
+      await this.webhookEventRepository.update(
+        { eventId },
+        { processed: true },
+      );
       return;
     }
 
@@ -925,7 +1119,18 @@ export class BillingSubscriptionService {
         default:
           this.logger.log(`Unhandled event type: ${event.type}`);
       }
+
+      // Mark event as successfully processed
+      await this.webhookEventRepository.update(
+        { eventId },
+        { processed: true },
+      );
     } catch (error) {
+      // Mark event as failed
+      await this.webhookEventRepository.update(
+        { eventId },
+        { processed: false, error: error.message },
+      );
       this.logger.error('Error processing webhook event:', error);
       throw error;
     }
@@ -934,27 +1139,27 @@ export class BillingSubscriptionService {
   private async handleCheckoutSessionCompleted(
     session: Stripe.Checkout.Session,
   ) {
-    this.logger.log('🎉 Checkout session completed:', session.id);
-    console.log('🎉 Checkout session completed:', session.id);
+    this.logger.log(`Checkout session completed: ${session.id}`);
 
     const userId = session.metadata?.user_id;
     const lookupKey = session.metadata?.lookup_key;
 
-    console.log('📋 Session metadata:', { userId, lookupKey });
+    this.logger.debug(
+      `Session metadata: ${JSON.stringify({ userId, lookupKey })}`,
+    );
 
     if (!userId) {
-      this.logger.error('❌ No user_id in session metadata');
-      console.error('❌ No user_id in session metadata');
+      this.logger.error('No user_id in session metadata');
       return;
     }
 
     if (session.subscription) {
-      console.log('🔄 Retrieving subscription:', session.subscription);
+      this.logger.debug(`Retrieving subscription: ${session.subscription}`);
       const subscription = await this.stripe.subscriptions.retrieve(
         session.subscription as string,
       );
 
-      console.log('💾 Updating user subscription for user:', userId);
+      this.logger.debug(`Updating user subscription for user: ${userId}`);
       const firstItem = subscription.items.data[0];
       const updatedSubscription = await this.updateUserSubscription(
         Number(userId),
@@ -972,13 +1177,15 @@ export class BillingSubscriptionService {
         },
       );
 
-      console.log('✅ Subscription saved to database:', updatedSubscription);
+      this.logger.debug(
+        `Subscription saved to database: ${updatedSubscription.planLookupKey}`,
+      );
 
       this.logger.log(
         `Subscription ${subscription.id} activated for user ${userId}`,
       );
     } else {
-      console.log('⚠️ No subscription found in session');
+      this.logger.warn('No subscription found in session');
     }
   }
 

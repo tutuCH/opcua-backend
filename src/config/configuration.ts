@@ -8,6 +8,7 @@ export const databaseConfig = registerAs('database', () => ({
     username: process.env.POSTGRES_USER || 'postgres',
     password: process.env.POSTGRES_PASSWORD || 'password',
     database: process.env.POSTGRES_DB || 'opcua_dashboard',
+    synchronize: process.env.POSTGRES_SYNCHRONIZE === 'true',
   },
 
   // InfluxDB Configuration
@@ -59,6 +60,11 @@ export const authConfig = registerAs('auth', () => ({
       'http://localhost:3000/auth/cognito/callback',
     issuerUrl: process.env.COGNITO_ISSUER_URL || null,
   },
+
+  // Google OAuth 2.0
+  google: {
+    clientId: process.env.GOOGLE_CLIENT_ID || null,
+  },
 }));
 
 export const emailConfig = registerAs('email', () => ({
@@ -76,4 +82,6 @@ export const stripeConfig = registerAs('stripe', () => ({
   publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
   secretKey: process.env.STRIPE_SECRET_KEY || null,
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || null,
+  planLookupKey: process.env.STRIPE_PLAN_LOOKUP_KEY || null,
+  planPriceId: process.env.STRIPE_PLAN_PRICE_ID || null,
 }));

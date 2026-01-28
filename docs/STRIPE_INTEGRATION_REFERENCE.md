@@ -1,0 +1,597 @@
+# Stripe API Reference
+
+Complete API reference for Stripe subscription and billing endpoints in the OPC UA Dashboard backend.
+
+## Base URL
+
+```
+http://localhost:3000/api/subscription
+```
+
+## Authentication
+
+All endpoints (except webhooks) require JWT authentication:
+
+```bash
+Authorization: Bearer <jwt_token>
+```
+
+To obtain a JWT token, use the login endpoint:
+
+```bash
+curl --location 'http://localhost:3000/auth/login' \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+    "email": "user@example.com",
+    "password": "password123"
+  }'
+```
+
+---
+
+## Endpoints
+
+### 1. Create Checkout Session
+
+Creates a Stripe Checkout session for subscription purchase. If `STRIPE_PLAN_PRICE_ID` or `STRIPE_PLAN_LOOKUP_KEY` is set, the backend uses that plan regardless of `lookupKey`.
+
+**Endpoint:** `POST /api/subscription/create-checkout-session`
+
+**Rate Limit:** 3 requests per second per user
+
+**Request Body:**
+
+```bash
+curl -X POST 'http://localhost:3000/api/subscription/create-checkout-session' \
+  -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \
+  -H 'Content-Type: application/json' \
+  --data-raw '{
+    "lookupKey": "basic_monthly",
+    "successUrl": "https://yourdomain.com/success?session_id={CHECKOUT_SESSION_ID}",
+    "cancelUrl": "https://yourdomain.com/cancel"
+  }'
+```
+
+**Request Parameters:**
+
+| Field        | Type   | Required | Description                                                                                                                                                  |
+| ------------ | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lookupKey`  | string | Yes      | Required by DTO; ignored when `STRIPE_PLAN_PRICE_ID` or `STRIPE_PLAN_LOOKUP_KEY` is set. Accepts a lookup key, price ID (`price_`), or product ID (`prod_`). |
+| `successUrl` | string | Yes      | URL to redirect after successful payment. Use `{CHECKOUT_SESSION_ID}` placeholder to include session ID                                                      |
+| `cancelUrl`  | string | Yes      | URL to redirect if user cancels                                                                                                                              |
+
+**Success Response (200 OK):**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "url": "https://checkout.stripe.com/c/pay/cs_test_...",
+    "sessionId": "cs_test_abc123xyz789"
+  }
+}
+```
+
+**Error Responses:**
+
+- **400 Bad Request** - Invalid lookup key or Stripe not configured
+
+  ```json
+  {
+    "statusCode": 400,
+    "message": "No price found for lookup key: invalid_key",
+    "error": "Bad Request"
+  }
+  ```
+
+- **400 Bad Request** - Selected plan is inactive
+
+  ```json
+  {
+    "statusCode": 400,
+    "message": "Selected plan is not active",
+    "error": "Bad Request"
+  }
+  ```
+
+- **401 Unauthorized** - Invalid or missing JWT token
+
+  ```json
+  {
+    "statusCode": 401,
+    "message": "Unauthorized"
+  }
+  ```
+
+- **404 Not Found** - User not found
+  ```json
+  {
+    "statusCode": 404,
+    "message": "User not found",
+    "error": "Not Found"
+  }
+  ```
+
+---
+
+### 2. Create Portal Session
+
+Creates a Stripe Customer Portal session for managing subscriptions. Requires an existing Stripe customer (created during checkout).
+
+**Endpoint:** `POST /api/subscription/create-portal-session`
+
+**Rate Limit:** 3 requests per second per user
+
+**Request Body:**
+
+```bash
+curl -X POST 'http://localhost:3000/api/subscription/create-portal-session' \
+  -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \
+  -H 'Content-Type: application/json' \
+  --data-raw '{
+    "returnUrl": "https://yourdomain.com/account"
+  }'
+```
+
+**Request Parameters:**
+
+| Field       | Type   | Required | Description                             |
+| ----------- | ------ | -------- | --------------------------------------- |
+| `returnUrl` | string | Yes      | URL to redirect after user exits portal |
+
+**Success Response (200 OK):**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "url": "https://billing.stripe.com/session/..."
+  }
+}
+```
+
+**Error Responses:**
+
+- **400 Bad Request** - No active subscription found
+  ```json
+  {
+    "statusCode": 400,
+    "message": "No active subscription found. Please create a subscription first.",
+    "error": "Bad Request"
+  }
+  ```
+
+---
+
+### 3. Get Current Subscription
+
+Retrieves the current user's subscription details.
+
+**Endpoint:** `GET /api/subscription/current`
+
+**Rate Limit:** 20 requests per 10 seconds per user
+
+**Request:**
+
+```bash
+curl -X GET 'http://localhost:3000/api/subscription/current' \
+  -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+```
+
+**Success Response (200 OK):**
+
+```json
+{
+  "subscription": {
+    "id": "sub_abc123xyz789",
+    "status": "active",
+    "plan": {
+      "id": "basic_monthly",
+      "name": "Basic Plan",
+      "price": 9.99,
+      "currency": "USD",
+      "interval": "month"
+    },
+    "currentPeriodStart": 1704067200,
+    "currentPeriodEnd": 1706745600,
+    "cancelAtPeriodEnd": false
+  }
+}
+```
+
+**No Subscription Response (200 OK):**
+
+```json
+{
+  "subscription": null
+}
+```
+
+---
+
+### 4. Get Subscription Plans
+
+Retrieves the active subscription plan selected by the backend.
+
+**Endpoint:** `GET /api/subscription/plans`
+
+**Rate Limit:** 100 requests per minute per user
+
+**Plan Selection:**
+
+The backend returns a single plan using this priority order:
+
+1. `STRIPE_PLAN_PRICE_ID`
+2. `STRIPE_PLAN_LOOKUP_KEY`
+3. Price or product metadata `primary_plan=true`
+4. Latest active recurring price
+
+Only active prices with active products are eligible.
+
+**Request:**
+
+```bash
+curl -X GET 'http://localhost:3000/api/subscription/plans' \
+  -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+```
+
+**Success Response (200 OK):**
+
+```json
+{
+  "plans": [
+    {
+      "id": "professional_monthly",
+      "name": "Professional Plan",
+      "description": "Unlimited monitoring and support",
+      "price": 500,
+      "currency": "TWD",
+      "interval": "month",
+      "features": [],
+      "popular": false
+    }
+  ]
+}
+```
+
+**Demo Mode Response (when Stripe not configured):**
+
+Returns a single hardcoded demo plan with the same structure.
+
+---
+
+### 5. Get Payment Methods
+
+Retrieves payment methods for the current user.
+
+**Endpoint:** `GET /api/subscription/payment-methods`
+
+**Rate Limit:** 20 requests per 10 seconds per user
+
+**Request:**
+
+```bash
+curl -X GET 'http://localhost:3000/api/subscription/payment-methods' \
+  -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+```
+
+**Success Response (200 OK):**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "payment_methods": [
+      {
+        "id": "pm_abc123xyz789",
+        "brand": "visa",
+        "last4": "4242",
+        "exp_month": 12,
+        "exp_year": 2025,
+        "is_default": false
+      }
+    ]
+  }
+}
+```
+
+If the customer exists but has no payment methods, `payment_methods` is an empty array. If no Stripe customer exists yet, this endpoint returns 404 (a customer is created when a checkout session is created).
+
+**Error Responses:**
+
+- **404 Not Found** - No customer found
+  ```json
+  {
+    "statusCode": 404,
+    "message": "No customer found",
+    "error": "Not Found"
+  }
+  ```
+
+---
+
+### 6. Cancel Subscription
+
+Cancels a subscription at the end of the current billing period.
+
+**Endpoint:** `DELETE /api/subscription/:subscriptionId`
+
+**Rate Limit:** 3 requests per second per user
+
+**Request:**
+
+```bash
+curl -X DELETE 'http://localhost:3000/api/subscription/sub_abc123xyz789' \
+  -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+```
+
+**URL Parameters:**
+
+| Parameter        | Type   | Required | Description            |
+| ---------------- | ------ | -------- | ---------------------- |
+| `subscriptionId` | string | Yes      | Stripe subscription ID |
+
+**Success Response (200 OK):**
+
+```json
+{
+  "status": "success",
+  "data": {
+    "subscription": {
+      "id": "sub_abc123xyz789",
+      "status": "active",
+      "cancel_at_period_end": true,
+      "current_period_end": 1706745600
+    }
+  }
+}
+```
+
+**Error Responses:**
+
+- **404 Not Found** - Subscription not found
+  ```json
+  {
+    "statusCode": 404,
+    "message": "Subscription not found",
+    "error": "Not Found"
+  }
+  ```
+
+---
+
+### 7. Webhook Handler
+
+Receives and processes Stripe webhook events.
+
+**Endpoint:** `POST /api/webhooks/stripe`
+
+**Authentication:** Stripe signature verification using `STRIPE_WEBHOOK_SECRET` (no JWT required)
+
+**Request:**
+
+```bash
+curl -X POST 'http://localhost:3000/api/webhooks/stripe' \
+  -H 'Content-Type: application/json' \
+  -H 'stripe-signature: t=timestamp,v1=signature_hash' \
+  --data-raw '{
+    "id": "evt_abc123xyz789",
+    "type": "checkout.session.completed",
+    "data": {
+      "object": {
+        "id": "cs_test_...",
+        "object": "checkout.session",
+        "metadata": {
+          "user_id": "123",
+          "lookup_key": "basic_monthly"
+        },
+        "subscription": "sub_abc123xyz789"
+      }
+    }
+  }'
+```
+
+**Headers:**
+
+| Header             | Type   | Required | Description                               |
+| ------------------ | ------ | -------- | ----------------------------------------- |
+| `stripe-signature` | string | Yes      | Stripe webhook signature for verification |
+| `Content-Type`     | string | Yes      | Must be `application/json`                |
+
+**Success Response (200 OK):**
+
+```json
+{
+  "received": true
+}
+```
+
+**Error Responses:**
+
+- **400 Bad Request** - Invalid signature
+  ```json
+  {
+    "statusCode": 400,
+    "message": "Webhook Error: Signature verification failed",
+    "error": "Bad Request"
+  }
+  ```
+
+---
+
+## Supported Webhook Events
+
+The webhook handler processes the following Stripe events:
+
+| Event Type                      | Description                              |
+| ------------------------------- | ---------------------------------------- |
+| `checkout.session.completed`    | Checkout session successfully completed  |
+| `customer.subscription.created` | New subscription created                 |
+| `customer.subscription.updated` | Subscription updated (plan change, etc.) |
+| `customer.subscription.deleted` | Subscription canceled/deleted            |
+| `invoice.payment_succeeded`     | Payment succeeded, subscription renewed  |
+| `invoice.payment_failed`        | Payment failed, subscription past due    |
+
+### Idempotency
+
+All webhook events are tracked for idempotency:
+
+- Duplicate events (same `event.id`) are automatically skipped
+- Each event is stored in the `webhook_events` table before processing
+- Processing status is tracked: `processed` (boolean), `error` (text)
+- Failed events are marked with error details for investigation
+
+---
+
+## Error Handling
+
+### Common Error Responses
+
+**Stripe Not Configured (Development Mode):**
+
+```json
+{
+  "statusCode": 400,
+  "message": "Stripe not configured - demo mode active",
+  "error": "Bad Request"
+}
+```
+
+**Stripe Connection Unhealthy:**
+
+```json
+{
+  "statusCode": 400,
+  "message": "Payment service is temporarily unavailable",
+  "error": "Bad Request"
+}
+```
+
+### Rate Limiting
+
+When rate limits are exceeded, you'll receive:
+
+```json
+{
+  "statusCode": 429,
+  "message": "ThrottlerException: Too Many Requests",
+  "error": "Too Many Requests"
+}
+```
+
+**Rate Limits by Endpoint:**
+
+| Endpoint                      | Limit | Period     |
+| ----------------------------- | ----- | ---------- |
+| POST /create-checkout-session | 3     | 1 second   |
+| POST /create-portal-session   | 3     | 1 second   |
+| GET /current                  | 20    | 10 seconds |
+| GET /plans                    | 100   | 1 minute   |
+| GET /payment-methods          | 20    | 10 seconds |
+| DELETE /:subscriptionId       | 3     | 1 second   |
+
+---
+
+## Environment Configuration
+
+Required environment variables in `.env` or `.env.local`:
+
+```bash
+# Stripe Configuration
+STRIPE_SECRET_KEY=sk_test_your_key_here
+STRIPE_PUBLISHABLE_KEY=pk_test_your_key_here
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
+
+# Optional single-plan selection
+STRIPE_PLAN_PRICE_ID=price_123
+STRIPE_PLAN_LOOKUP_KEY=professional_monthly
+```
+
+`STRIPE_PLAN_PRICE_ID` takes precedence over `STRIPE_PLAN_LOOKUP_KEY` when both are set.
+
+---
+
+## Expected Workflow
+
+1. Configure Stripe keys and plan selector variables in `.env.local`.
+2. Call `GET /api/subscription/plans` to retrieve the single plan.
+3. Call `POST /api/subscription/create-checkout-session` with the plan id and redirect the user to `data.url`.
+4. Complete payment in Stripe Checkout.
+5. Stripe sends webhook events to `POST /api/webhooks/stripe`; the backend updates subscription records.
+6. Call `GET /api/subscription/current` to display subscription status.
+7. Call `GET /api/subscription/payment-methods` to list saved cards (may be empty).
+8. Optional: `POST /api/subscription/create-portal-session` to manage billing.
+9. Cancel via `DELETE /api/subscription/:subscriptionId`, then refresh `GET /api/subscription/current`.
+
+---
+
+## Testing with Stripe CLI
+
+For local development, use Stripe CLI to forward webhooks:
+
+```bash
+# Start webhook forwarding
+stripe listen --forward-to localhost:3000/api/webhooks/stripe
+
+# Test checkout session completed event
+stripe trigger checkout.session.completed
+
+# Test invoice payment failed event
+stripe trigger invoice.payment_failed
+```
+
+---
+
+## Security Best Practices
+
+1. **Webhook Verification**: Always verify Stripe signatures using `STRIPE_WEBHOOK_SECRET`
+2. **Idempotency**: All webhook events are checked for duplicates before processing
+3. **Rate Limiting**: All endpoints protected with appropriate rate limits
+4. **Authentication**: All endpoints require valid JWT except webhooks
+5. **User Ownership**: Subscription operations verify user ownership before processing
+
+---
+
+## Database Schema
+
+### User Subscriptions Table
+
+```sql
+CREATE TABLE user_subscription (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  stripe_subscription_id VARCHAR(255),
+  stripe_customer_id VARCHAR(255),
+  plan_lookup_key VARCHAR(255),
+  status VARCHAR(50),
+  current_period_start TIMESTAMP,
+  current_period_end TIMESTAMP,
+  canceled_at TIMESTAMP,
+  last_payment_date TIMESTAMP,
+  payment_failed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Webhook Events Table
+
+```sql
+CREATE TABLE webhook_events (
+  id SERIAL PRIMARY KEY,
+  event_id VARCHAR(255) UNIQUE NOT NULL,
+  event_type VARCHAR(100) NOT NULL,
+  processed BOOLEAN DEFAULT FALSE,
+  error TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+---
+
+## Additional Resources
+
+- [Stripe API Documentation](https://stripe.com/docs/api)
+- [Stripe Webhooks Guide](https://stripe.com/docs/webhooks)
+- [Stripe Checkout Guide](https://stripe.com/docs/payments/checkout)
+- [Stripe Customer Portal](https://stripe.com/docs/billing/subscriptions/customer-portal)

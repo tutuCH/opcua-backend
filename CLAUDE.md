@@ -160,3 +160,5 @@ curl --location 'http://localhost:3000/auth/login' \
 - Response compression enabled (gzip/deflate) for responses >1KB (see `src/main.ts:18-29`)
 - WebSocket connection limits: 5 connections per IP address (configured in `src/websocket/machine.gateway.ts:37`)
 - MQTT processor validates machine existence in database before processing messages (see `src/mqtt-processor/mqtt-processor.service.ts:148-168`)
+- always update the file FRONTEND_INTEGRATION.md everytime when did an api update
+- when mentioned create a document, always create under /docs

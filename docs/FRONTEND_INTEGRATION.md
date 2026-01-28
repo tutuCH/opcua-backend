@@ -19,7 +19,6 @@ High-level data flow:
 5. Frontend uses REST for historical data, CRUD, and billing.
 
 Quick sequence diagram (REST + WebSocket):
-
 ```
 Frontend                  Backend (REST)              Backend (WS)            Redis/Influx
    |                            |                          |                        |
@@ -48,24 +47,18 @@ Frontend                  Backend (REST)              Backend (WS)            Re
 
 ## Base URLs and Environment Setup
 
-**Development:**
+REST and WebSocket are served from the same host/port.
 
-- REST base URL: `http://localhost:3000`
-- WebSocket URL: `ws://localhost:3000/socket.io/` (Socket.IO, not raw WS)
+- REST base URL (dev): `http://localhost:3000`
+- REST base URL (prod): `https://<your-domain>`
+- WebSocket URL: `ws://<host>:<port>/socket.io/` (Socket.IO, not raw WS)
 
-**Production:**
-
-- REST base URL: `https://api-dashboard.harrytu.cv`
-- WebSocket URL: `wss://api-dashboard.harrytu.cv/socket.io/`
-
-**Recommended frontend env vars (use your framework's public prefix):**
+Recommended frontend env vars:
 
 ```
 VITE_API_URL=http://localhost:3000
 VITE_WS_URL=ws://localhost:3000
 ```
-
-If frontend uses Vite, map to `VITE_API_URL` and `VITE_WS_URL`. If using another bundler, map accordingly.
 
 CORS is configured in `src/main.ts`. Allowed origins include:
 
@@ -89,21 +82,18 @@ If your frontend runs on a new domain, add it to the CORS list.
 ### Password Requirements
 
 All password fields must meet the following requirements:
-
 - Minimum 8 characters
 - At least 1 uppercase letter (A-Z)
 - At least 1 lowercase letter (a-z)
 - At least 1 number (0-9)
-- At least 1 special character (@$!%\*?&)
+- At least 1 special character (@$!%*?&)
 
 ### Auth Endpoints
 
 #### POST /auth/login
-
 Authenticate with email/password.
 
 Request:
-
 ```json
 {
   "email": "user@example.com",
@@ -112,7 +102,6 @@ Request:
 ```
 
 Response:
-
 ```json
 {
   "access_token": "<jwt>",
@@ -129,16 +118,13 @@ Response:
 ```
 
 Common errors:
-
 - `401 Unauthorized` if credentials are invalid.
 - `400 Bad Request` if validation fails.
 
 #### POST /auth/sign-up
-
 Start signup by creating a verification token. The response includes a verification link (email sending is currently disabled).
 
 Request:
-
 ```json
 {
   "email": "user@example.com",
@@ -149,14 +135,12 @@ Request:
 ```
 
 Field validation:
-
 - `username`: 2-50 characters, required
 - `email`: Valid email format, required
 - `password`: Must meet password requirements (see above), required
 - `role`: Optional, defaults to "operator"
 
 Response:
-
 ```json
 {
   "status": "success",
@@ -165,20 +149,16 @@ Response:
 ```
 
 Common errors:
-
 - `409 Conflict` if username is missing or email already exists.
 - `400 Bad Request` if password doesn't meet requirements.
 
 #### GET /auth/verify-email
-
 Complete signup and create the user.
 
 Query params:
-
 - `token` (string, required)
 
 Response (success):
-
 ```json
 {
   "access_token": "<jwt>",
@@ -197,7 +177,6 @@ Response (success):
 ```
 
 Response (failure):
-
 ```json
 {
   "status": "error",
@@ -206,11 +185,9 @@ Response (failure):
 ```
 
 #### GET /auth/profile
-
 Get the current authenticated user's profile.
 
 Response:
-
 ```json
 {
   "userId": 1,
@@ -225,15 +202,12 @@ Response:
 ```
 
 Common errors:
-
 - `401 Unauthorized` if missing/invalid token.
 
 #### PUT /auth/profile
-
 Update the current authenticated user's profile.
 
 Request:
-
 ```json
 {
   "name": "John Smith",
@@ -242,12 +216,10 @@ Request:
 ```
 
 Field validation:
-
 - `name`: Maps to `username`, 2-50 characters, optional
 - `email`: Valid email format, optional
 
 Response:
-
 ```json
 {
   "userId": 1,
@@ -261,44 +233,15 @@ Response:
 ```
 
 Common errors:
-
-- `401 Unauthorized` if missing/invalid token.
-- `404 Not Found` if user doesn't exist.
-- `409 Conflict` if email is already in use.
-- `400 Bad Request` if validation fails.
-
-Field validation:
-
-- `name`: Maps to `username`, 2-50 characters, optional
-- `email`: Valid email format, optional
-
-Response:
-
-```json
-{
-  "userId": 1,
-  "username": "John Smith",
-  "email": "newemail@example.com",
-  "accessLevel": "admin",
-  "status": "active",
-  "createdAt": "2024-01-01T00:00:00.000Z",
-  "updatedAt": "2024-01-09T12:35:00.000Z"
-}
-```
-
-Common errors:
-
 - `401 Unauthorized` if missing/invalid token.
 - `404 Not Found` if user doesn't exist.
 - `409 Conflict` if email is already in use.
 - `400 Bad Request` if validation fails.
 
 #### PUT /auth/change-password
-
 Change the current authenticated user's password.
 
 Request:
-
 ```json
 {
   "currentPassword": "OldPassword123!",
@@ -307,28 +250,6 @@ Request:
 ```
 
 Response:
-
-```json
-{
-  "message": "Password changed successfully"
-}
-```
-
-#### PUT /auth/change-password
-
-Change the current authenticated user's password.
-
-Request:
-
-```json
-{
-  "currentPassword": "OldPassword123!",
-  "newPassword": "NewPassword456!"
-}
-```
-
-Response:
-
 ```json
 {
   "message": "Password changed successfully"
@@ -336,16 +257,13 @@ Response:
 ```
 
 Common errors:
-
 - `401 Unauthorized` if current password is incorrect.
 - `400 Bad Request` if new password doesn't meet requirements.
 
 #### POST /auth/forgot-password
-
 Sends a reset link by email.
 
 Request:
-
 ```json
 {
   "email": "user@example.com"
@@ -353,7 +271,6 @@ Request:
 ```
 
 Response:
-
 ```json
 {
   "status": "success",
@@ -364,11 +281,9 @@ Response:
 Note: Always returns success response to prevent email enumeration.
 
 #### POST /auth/reset-password
-
 Reset password using token from email.
 
 Request:
-
 ```json
 {
   "token": "<reset_token_from_email>",
@@ -377,7 +292,6 @@ Request:
 ```
 
 Response (success):
-
 ```json
 {
   "access_token": "<jwt>",
@@ -396,7 +310,6 @@ Response (success):
 ```
 
 Response (failure):
-
 ```json
 {
   "status": "error",
@@ -405,11 +318,9 @@ Response (failure):
 ```
 
 #### POST /auth/google
-
 Authenticate user using Google OAuth 2.0.
 
 Request:
-
 ```json
 {
   "idToken": "eyJhbGciOiJSUzI1NiIsImtpZCI6Ij..."
@@ -417,14 +328,12 @@ Request:
 ```
 
 Notes:
-
 - `idToken` is the Google ID token from the OAuth flow (obtained from frontend using `@react-oauth/google` or similar)
 - Backend verifies this token with Google's public keys
 - If user doesn't exist, creates account automatically with `accessLevel: "operator"` and `status: "active"`
 - Returns JWT and user object (same format as regular login)
 
 Success Response (200 OK):
-
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -441,12 +350,10 @@ Success Response (200 OK):
 ```
 
 Common errors:
-
 - `401 Unauthorized` if token is invalid or expired.
 - `401 Unauthorized` if `GOOGLE_CLIENT_ID` is not configured.
 
 Frontend Behavior:
-
 - Use `@react-oauth/google` library to obtain ID token
 - Send ID token to backend for verification
 - Store returned JWT and redirect to dashboard
@@ -458,11 +365,9 @@ All endpoints below require JWT unless marked as Public.
 ### Factories
 
 #### GET /factories
-
 Returns all factories for the authenticated user, including machines.
 
 Response (example):
-
 ```json
 [
   {
@@ -476,6 +381,7 @@ Response (example):
       {
         "machineId": 1,
         "machineName": "Machine 1",
+        "machineIpAddress": "192.168.1.100",
         "machineIndex": "1",
         "status": "running",
         "createdAt": "2024-01-15T10:00:00.000Z"
@@ -486,15 +392,12 @@ Response (example):
 ```
 
 Common errors:
-
 - `401 Unauthorized` if token missing/invalid.
 
 #### GET /factories/:id
-
 Returns a single factory (includes `user` and `machines`).
 
 Response (example):
-
 ```json
 {
   "factoryId": 1,
@@ -517,16 +420,13 @@ Response (example):
 ```
 
 Common errors:
-
 - `404 Not Found` if factory does not exist.
 - `401/403` if user does not own the factory.
 
 #### GET /factories/user/factories
-
 Lightweight list of factories for the user.
 
 Response (example):
-
 ```json
 [
   {
@@ -542,7 +442,6 @@ Response (example):
 Create a new factory.
 
 Request:
-
 ```json
 {
   "factoryName": "Line B",
@@ -553,7 +452,6 @@ Request:
 ```
 
 Response (example):
-
 ```json
 {
   "factoryId": 2,
@@ -566,15 +464,12 @@ Response (example):
 ```
 
 Common errors:
-
 - `404 Not Found` if the user ID in the JWT is missing in DB.
 
 #### PATCH /factories/:factoryId
-
 Update a factory. Include all numeric fields to avoid backend `undefined.toString()` errors.
 
 Request:
-
 ```json
 {
   "factoryName": "Line B Updated",
@@ -587,29 +482,24 @@ Request:
 Response: same shape as POST.
 
 Common errors:
-
 - `404 Not Found` if factory does not exist.
 - `401/403` if user does not own the factory.
 
 #### DELETE /factories/:id
-
 Deletes a factory.
 
 Response: empty (204/200 with no body).
 
 Common errors:
-
 - `404 Not Found` if factory does not exist.
 - `401/403` if user does not own the factory.
 
 ### Machines
 
 #### GET /machines/factories-machines
-
 Returns factories and machines for layout building (note `factoryWidth/Height` names).
 
 Response (example):
-
 ```json
 [
   {
@@ -621,6 +511,7 @@ Response (example):
       {
         "machineId": 1,
         "machineName": "Machine 1",
+        "machineIpAddress": "192.168.1.100",
         "machineIndex": 1
       }
     ]
@@ -629,14 +520,13 @@ Response (example):
 ```
 
 #### POST /machines
-
 Create a new machine.
 
-Request:
-
+Request (factoryIndex is required by DTO even though it is not used):
 ```json
 {
   "machineName": "Machine 2",
+  "machineIpAddress": "192.168.1.101",
   "machineIndex": "2",
   "factoryId": 1,
   "status": "offline"
@@ -644,11 +534,11 @@ Request:
 ```
 
 Response (example):
-
 ```json
 {
   "machineId": 2,
   "machineName": "Machine 2",
+  "machineIpAddress": "192.168.1.101",
   "machineIndex": "2",
   "status": "offline",
   "createdAt": "2024-01-15T10:00:00.000Z"
@@ -656,20 +546,19 @@ Response (example):
 ```
 
 Common errors:
-
 - `404 Not Found` if factory does not exist.
 - `401/403` if user does not own the factory.
+- `409 Conflict` if machine IP address conflicts (DB constraint may vary by environment).
 
 #### GET /machines/:id
-
 Returns a machine with `user` and `factory` relations.
 
 Response (example):
-
 ```json
 {
   "machineId": 1,
   "machineName": "Machine 1",
+  "machineIpAddress": "192.168.1.100",
   "machineIndex": "1",
   "status": "running",
   "createdAt": "2024-01-15T10:00:00.000Z",
@@ -692,21 +581,20 @@ Response (example):
 ```
 
 Common errors:
-
 - `404 Not Found` if machine does not exist.
 - `401/403` if user does not own the machine.
 
 #### PATCH /machines/:id
-
 Update machine properties.
 
 Request:
-
 ```json
 {
   "machineName": "Machine 1A",
+  "machineIpAddress": "192.168.1.110",
   "machineIndex": "1",
   "factoryId": 1,
+  "factoryIndex": 1,
   "status": "maintenance"
 }
 ```
@@ -714,16 +602,13 @@ Request:
 Response: updated machine entity.
 
 Common errors:
-
 - `404 Not Found` if machine does not exist.
 - `401/403` if user does not own the machine.
 
 #### POST /machines/update-index
-
 Update a machine index within a factory (used for ordering).
 
 Request:
-
 ```json
 {
   "machineId": 1,
@@ -732,8 +617,12 @@ Request:
 }
 ```
 
-Response:
+Common errors:
 
+- `404 Not Found` if machine or factory does not exist.
+- `401/403` if user does not own the factory or machine.
+
+Response:
 ```json
 {
   "message": "Machine with ID 1 successfully updated. New machineIndex: 3",
@@ -744,22 +633,18 @@ Response:
 ```
 
 Common errors:
-
 - `404 Not Found` if machine or factory does not exist.
 - `401/403` if user does not own the factory or machine.
 
 #### DELETE /machines/:id
-
 Deletes a machine.
 
 Response (string):
-
 ```json
 "Machine with ID 1 successfully removed."
 ```
 
 Common errors:
-
 - `404 Not Found` if machine does not exist.
 - `401/403` if user does not own the machine.
 
@@ -768,22 +653,17 @@ Common errors:
 All endpoints verify machine ownership via the JWT.
 
 #### GET /machines/:id/realtime-history
-
 Returns paginated InfluxDB realtime data for the machine.
 
 **IMPORTANT**: Pagination is now enforced. You must implement pagination controls in your frontend.
 
 Query params:
-
 - `timeRange` (default `-1h`) - Time range for data retrieval
 - `limit` (default `50`, max `1000`) - Number of records per page
 - `offset` (default `0`) - Starting record position
 - `aggregate` (optional) - Aggregation window: `1m`, `5m`, `15m`, `30m`, `1h`, `6h`, `1d`
 
-**NOTE**: **Legacy endpoint** - `fields` and `aggregateType` parameters are not supported. Only `timeRange`, `limit`, `offset`, and `aggregate` are supported.
-
 Response (example):
-
 ```json
 {
   "data": [
@@ -815,13 +695,12 @@ Response (example):
 ```
 
 **Pagination Example:**
-
 ```typescript
 const loadHistory = async (page = 0) => {
   const limit = 50;
   const offset = page * limit;
   const res = await fetch(
-    `/machines/${id}/realtime-history?timeRange=-1h&limit=${limit}&offset=${offset}`,
+    `/machines/${id}/realtime-history?timeRange=-1h&limit=${limit}&offset=${offset}`
   );
   const { data, pagination } = await res.json();
   console.log(`Loaded ${data.length} of ${pagination.total} records`);
@@ -830,28 +709,22 @@ const loadHistory = async (page = 0) => {
 ```
 
 Common errors:
-
 - `404 Not Found` if machine does not exist.
 - `401/403` if user does not own the machine.
 - `400 Bad Request` if limit exceeds 1000.
 
 #### GET /machines/:id/spc-history
-
 Returns paginated InfluxDB SPC data for the machine.
 
 **IMPORTANT**: Pagination is now enforced. You must implement pagination controls in your frontend.
 
 Query params:
-
 - `timeRange` (default `-1h`) - Time range for data retrieval
 - `limit` (default `50`, max `1000`) - Number of records per page
 - `offset` (default `0`) - Starting record position
 - `aggregate` (optional) - Aggregation window: `1m`, `5m`, `15m`, `30m`, `1h`, `6h`, `1d`
 
-**NOTE**: **Legacy endpoint** - `fields` and `aggregateType` parameters are not supported. Only `timeRange`, `limit`, `offset`, and `aggregate` are supported.
-
 Response (example):
-
 ```json
 {
   "data": [
@@ -883,121 +756,26 @@ Response (example):
 }
 ```
 
-**Pagination Example:**
-
-```typescript
-const loadHistory = async (page = 0) => {
-  const limit = 50;
-  const offset = page * limit;
-  const res = await fetch(
-    `/machines/${id}/spc-history?timeRange=-1h&limit=${limit}&offset=${offset}`,
-  );
-  const { data, pagination } = await res.json();
-  console.log(`Loaded ${data.length} of ${pagination.total} records`);
-  return { data, hasMore: pagination.hasMore };
-};
-```
-
-Common errors:
-
-- `404 Not Found` if machine does not exist.
-- `401/403` if user does not own the machine.
-- `400 Bad Request` if limit exceeds 1000.
-
 ### SPC v2.0 Performance-Optimized Endpoints
 
-**Field Validation:** All SPC endpoints validate field names against an allowed whitelist. Invalid field names return `400 Bad Request` with a list of valid fields.
+**Field Validation:** All SPC endpoints validate field names against an allowed whitelist. Invalid field names will return `400 Bad Request` with a list of valid fields.
 
 Valid SPC fields:
-
 - `cycle_number`, `cycle_time`, `injection_velocity_max`, `injection_pressure_max`, `switch_pack_time`, `temp_1`, `temp_2`, `temp_3` (required)
 - `switch_pack_pressure`, `switch_pack_position`, `injection_time`, `plasticizing_time`, `plasticizing_pressure_max`, `temp_4` through `temp_10`, `injection_pressure_set`, `fill_cooling_time`, `injection_pressure_set_min`, `oil_temperature_cycle`, `end_mold_open_speed`, `injection_start_speed` (optional)
 
-Note: `temp_4` through `temp_10` are optional and may be missing for some devices.
-
-#### GET /api/spc/series
-
-Chart-optimized SPC series and stats in one payload. Use this for charts; keep history endpoints for tables/export.
-
-Query params:
-
-- `machineId` (required)
-- `field` (required)
-- `window` (optional, default `last_1h`) - `last_15m`, `last_1h`, `last_6h`, `last_24h`, `last_3d`, `last_7d`, `custom`
-- `start` and `end` (required when `window=custom`)
-- `limit` (optional, default `100`, max `100`)
-- `order` (optional, default `asc`) - `asc` or `desc`
-- `downsample` (optional, default `none`) - `none`, `lttb`, `avg`, `minmax`
-- `includeStats` (optional, default `true`)
-- `includeLimits` (optional, default `true`)
-
-Response example:
-
-```json
-{
-  "machineId": "machine-123",
-  "field": "cycle_time",
-  "unit": "seconds",
-  "window": {
-    "mode": "last_1h",
-    "start": "2026-01-20T03:31:12.398Z",
-    "end": "2026-01-20T04:31:12.398Z"
-  },
-  "sampling": {
-    "limit": 100,
-    "returned": 100,
-    "downsample": "lttb",
-    "intervalMs": 36000
-  },
-  "series": [
-    { "ts": "2026-01-20T04:30:08.517Z", "value": 33.87 },
-    { "ts": "2026-01-20T04:30:40.517Z", "value": 34.12 }
-  ],
-  "stats": {
-    "count": 100,
-    "mean": 33.95,
-    "stdDev": 0.41,
-    "min": 32.88,
-    "max": 34.92,
-    "median": 33.91,
-    "p95": 34.6
-  },
-  "limits": {
-    "ucl": 35.18,
-    "lcl": 32.72,
-    "mean": 33.95,
-    "sigma": 0.41,
-    "method": "xbar-3sigma"
-  },
-  "meta": {
-    "source": "influxdb",
-    "generatedAt": "2026-01-20T04:31:12.398Z"
-  }
-}
-```
-
-Notes:
-
-- `stats` and `limits` are computed from the raw window (not the downsampled series).
-- `series` is downsampled to a maximum of 100 points.
-- `sampling.intervalMs = (windowEnd - windowStart) / limit`.
-- If no data is found: `series: []`, `stats: null`, `limits: null`.
-
 #### GET /machines/:id/spc/limits
-
 Get precomputed SPC control limits (UCL, LCL, Mean, Standard Deviation) with caching.
 
 **Purpose:** Offloads CPU-intensive calculations from frontend to backend.
 
 Query params:
-
 - `fields` (required) - Comma-separated field names (e.g., `cycle_time,injection_velocity_max`)
 - `lookback` (optional, default `24h`) - Time range: `1h`, `6h`, `24h`, `7d`
 - `sigma` (optional, default `3`) - Number of standard deviations: `2`, `3`, `4`
 - `forceRecalculate` (optional, default `false`) - Bypass cache
 
 Response example:
-
 ```json
 {
   "limits": {
@@ -1007,7 +785,7 @@ Response example:
       "ucl": 14.8,
       "lcl": 9.88,
       "n": 1440,
-      "calculatedAt": "2026-01-18T10:50:00Z",
+      "calculatedAt": "2026-01-18T10:00:00Z",
       "expiresAt": "2026-01-18T10:30:00Z",
       "isCached": false
     }
@@ -1021,22 +799,18 @@ Response example:
 ```
 
 Cache behavior:
-
 - 30-minute TTL
 - Frontend should refresh 5 minutes before `expiresAt`
 - Use `forceRecalculate=true` to bypass cache
 
 #### GET /machines/:id/spc/latest
-
-Get most recent N data points (cached).
+Get the most recent N data points (cached).
 
 Query params:
-
 - `fields` (optional) - Comma-separated field names
 - `count` (optional, default `10`) - Number of points (1-100)
 
 Response example:
-
 ```json
 {
   "deviceId": "Machine 1",
@@ -1053,43 +827,16 @@ Response example:
 
 Cache: 10-second TTL for high-frequency polling.
 
-#### GET /machines/:id/realtime/latest
-
-Get most recent N realtime points (cached).
-
-Query params:
-
-- `fields` (optional) - Comma-separated field names
-- `count` (optional, default `10`) - Number of points (1-100)
-
-Response example:
-
-```json
-{
-  "deviceId": "Machine 1",
-  "data": [{ "_time": "2026-01-18T10:46:00Z", "temp_1": 221.5 }],
-  "metadata": {
-    "count": 1,
-    "cachedAt": "2026-01-18T10:47:01Z"
-  }
-}
-```
-
-Cache: 10-second TTL for high-frequency polling.
-
 #### GET /machines/:id/spc/history-optimized
-
-Fetch historical SPC data with intelligent downsampling (Grafana-style).
+Fetch historical data with intelligent downsampling (Grafana-style).
 
 Query params:
-
 - `from` (required) - Start timestamp (ISO 8601)
 - `to` (required) - End timestamp (ISO 8601)
 - `fields` (optional) - Comma-separated field names
 - `step` (optional, default `50`) - Target number of data points
 
 Response example:
-
 ```json
 {
   "deviceId": "Machine 1",
@@ -1106,34 +853,7 @@ Response example:
 }
 ```
 
-#### GET /machines/:id/realtime/history-optimized
-
-Fetch historical realtime data with intelligent downsampling (Grafana-style).
-
-Query params:
-
-- `from` (required) - Start timestamp (ISO 8601)
-- `to` (required) - End timestamp (ISO 8601)
-- `fields` (optional) - Comma-separated field names
-- `step` (optional, default `50`) - Target number of data points
-
-Response example:
-
-```json
-{
-  "deviceId": "Machine 1",
-  "data": [{ "_time": "2026-01-18T09:00:00Z", "temp_1": 221.5 }],
-  "metadata": {
-    "timeRange": "2026-01-18T09:00:00Z/2026-01-18T10:00:00Z",
-    "pointsReturned": 2,
-    "requestedFields": ["temp_1"],
-    "queryTime": "15ms"
-  }
-}
-```
-
 Automatic downsampling:
-
 - ≤ 1 hour: raw data
 - ≤ 6 hours: 1-minute average
 - ≤ 24 hours: 5-minute average
@@ -1141,11 +861,9 @@ Automatic downsampling:
 - > 7 days: 1-hour average
 
 #### GET /machines/:id/spc/metadata
-
 Get field metadata for dynamic chart configuration.
 
 Response example:
-
 ```json
 {
   "deviceId": "Machine 1",
@@ -1158,17 +876,19 @@ Response example:
       "min": 10.0,
       "max": 15.0,
       "suggestedRange": [10, 15]
+    },
+    {
+      "name": "injection_velocity_max",
+      "displayName": "Injection Velocity (Max)",
+      "unit": "mm/s",
+      "dataType": "float",
+      "min": 70.0,
+      "max": 95.0,
+      "suggestedRange": [70, 95]
     }
   ],
   "capabilities": {
-    "supportedAggregations": [
-      "mean",
-      "median",
-      "min",
-      "max",
-      "stdDev",
-      "count"
-    ],
+    "supportedAggregations": ["mean", "median", "min", "max", "stdDev", "count"],
     "supportedResolutions": ["auto", "1m", "5m", "15m", "1h", "6h", "1d"],
     "maxPointsPerQuery": 10000
   }
@@ -1180,54 +900,29 @@ Response example:
 ```typescript
 // 1. Fetch control limits (cached)
 const limits = await fetch(
-  `/machines/${id}/spc/limits?fields=cycle_time&lookback=24h&sigma=3`,
-).then((r) => r.json());
+  `/machines/${id}/spc/limits?fields=cycle_time&lookback=24h&sigma=3`
+).then(r => r.json());
 
 // 2. Fetch historical data with downsampling
 const history = await fetch(
-  `/machines/${id}/spc/history-optimized?from=${startDate}&to=${endDate}&fields=cycle_time&step=50`,
-).then((r) => r.json());
+  `/machines/${id}/spc/history-optimized?from=${startDate}&to=${endDate}&fields=cycle_time&step=50`
+).then(r => r.json());
 
 // 3. Fetch latest data for real-time updates
-const latest = await fetch(`/machines/${id}/spc/latest?count=5`).then((r) =>
-  r.json(),
-);
+const latest = await fetch(
+  `/machines/${id}/spc/latest?count=5`
+).then(r => r.json());
 
 // 4. Use metadata for dynamic configuration
-const metadata = await fetch(`/machines/${id}/spc/metadata`).then((r) =>
-  r.json(),
-);
+const metadata = await fetch(
+  `/machines/${id}/spc/metadata`
+).then(r => r.json());
 ```
 
-### Frontend Data Flow and State Expectations
-
-Key identifiers:
-
-- REST uses `machineId` for most endpoints.
-- WebSocket and MQTT use `deviceId` = `machine.machineName`.
-
-Recommended frontend flow:
-
-1. Login -> store `access_token`.
-2. Fetch `/machines/factories-machines` or `/factories` for layout.
-3. Build a lookup map of `machineId -> machineName`.
-4. For realtime views:
-   - Connect WebSocket.
-   - Subscribe using `deviceId` = `machineName`.
-   - Update per-machine state on `realtime-update` / `spc-update` / `machine-alert`.
-5. For history views:
-   - Call `/machines/:id/realtime-history` and `/machines/:id/spc-history`.
-   - Prefer optimized endpoints for charts when possible (`/machines/:id/realtime/history-optimized`, `/machines/:id/spc/history-optimized`).
-6. For status widgets:
-   - Use `/machines/:id/status` for one-off status.
-   - Or rely on WebSocket `machine-status` after subscription.
-
 #### GET /machines/:id/status
-
 Returns the latest cached status from Redis (or a "No status" message).
 
 Response (example):
-
 ```json
 {
   "deviceId": "Machine 1",
@@ -1249,16 +944,13 @@ Response (example):
 ```
 
 #### GET /machines/:id/history/stream
-
 Returns combined realtime/SPC datasets. Headers are chunked but the response is a single JSON payload.
 
 Query params:
-
 - `timeRange` (default `-1h`)
 - `dataType` (`realtime`, `spc`, or omit for both)
 
 Response (example):
-
 ```json
 {
   "deviceId": "Machine 1",
@@ -1274,15 +966,12 @@ Response (example):
 ### Alarm Messages
 
 #### GET /machines/:id/alarms
-
 Returns alarm history from InfluxDB for the machine.
 
 Query params:
-
 - `timeRange` (default `-1h`)
 
 Response (example):
-
 ```json
 {
   "data": [
@@ -1302,7 +991,6 @@ Response (example):
 ```
 
 Common errors:
-
 - `401 Unauthorized` if token missing/invalid.
 - `404 Not Found` if machine does not exist.
 
@@ -1313,11 +1001,9 @@ Common errors:
 These endpoints are protected by JWT but do not enforce admin roles. Responses include the `password` field.
 
 #### POST /user
-
 Create a user directly (password is not hashed here).
 
 Request:
-
 ```json
 {
   "username": "jdoe",
@@ -1330,23 +1016,18 @@ Request:
 Response: user entity.
 
 #### GET /user
-
 Returns all users (includes password).
 
 #### GET /user/:email
-
 Returns a single user (includes password).
 
 #### PATCH /user/:id
-
 Update a user by ID.
 
 #### DELETE /user/:email
-
 Delete a user by email.
 
 Common errors:
-
 - `404 Not Found` if user does not exist (PATCH/DELETE).
 
 ### Subscription & Billing
@@ -1354,7 +1035,6 @@ Common errors:
 All endpoints are prefixed with `/api/subscription` and require JWT.
 
 **Rate Limits:**
-
 - POST /create-checkout-session: 5 requests per minute
 - POST /create-portal-session: 10 requests per minute
 - GET /current: 30 requests per minute
@@ -1363,11 +1043,9 @@ All endpoints are prefixed with `/api/subscription` and require JWT.
 - DELETE /:subscriptionId: 5 requests per minute
 
 #### POST /api/subscription/create-checkout-session
-
 Create a Stripe checkout session.
 
 **CURL Example:**
-
 ```bash
 curl -X POST 'http://localhost:3000/api/subscription/create-checkout-session' \
   -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \
@@ -1380,7 +1058,6 @@ curl -X POST 'http://localhost:3000/api/subscription/create-checkout-session' \
 ```
 
 **Request Body:**
-
 ```json
 {
   "lookupKey": "basic_monthly",
@@ -1390,7 +1067,6 @@ curl -X POST 'http://localhost:3000/api/subscription/create-checkout-session' \
 ```
 
 **Response:**
-
 ```json
 {
   "status": "success",
@@ -1402,16 +1078,13 @@ curl -X POST 'http://localhost:3000/api/subscription/create-checkout-session' \
 ```
 
 **Common errors:**
-
 - `400 Bad Request` if Stripe is not configured or unhealthy.
 - `404 Not Found` if user doesn't exist.
 
 #### POST /api/subscription/create-portal-session
-
 Create a Stripe billing portal session.
 
 **CURL Example:**
-
 ```bash
 curl -X POST 'http://localhost:3000/api/subscription/create-portal-session' \
   -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' \
@@ -1422,7 +1095,6 @@ curl -X POST 'http://localhost:3000/api/subscription/create-portal-session' \
 ```
 
 **Request Body:**
-
 ```json
 {
   "returnUrl": "https://yourapp.com/account"
@@ -1430,7 +1102,6 @@ curl -X POST 'http://localhost:3000/api/subscription/create-portal-session' \
 ```
 
 **Response:**
-
 ```json
 {
   "status": "success",
@@ -1441,18 +1112,15 @@ curl -X POST 'http://localhost:3000/api/subscription/create-portal-session' \
 ```
 
 #### GET /api/subscription/current
-
 Returns the current subscription (or `null` if none / demo mode).
 
 **CURL Example:**
-
 ```bash
 curl -X GET 'http://localhost:3000/api/subscription/current' \
   -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
 ```
 
 **Response:**
-
 ```json
 {
   "subscription": {
@@ -1473,18 +1141,15 @@ curl -X GET 'http://localhost:3000/api/subscription/current' \
 ```
 
 #### GET /api/subscription/plans
-
 Returns subscription plans (Stripe plans or demo fallback).
 
 **CURL Example:**
-
 ```bash
 curl -X GET 'http://localhost:3000/api/subscription/plans' \
   -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
 ```
 
 **Response:**
-
 ```json
 {
   "plans": [
@@ -1503,18 +1168,15 @@ curl -X GET 'http://localhost:3000/api/subscription/plans' \
 ```
 
 #### GET /api/subscription/payment-methods
-
 Returns stored payment methods.
 
 **CURL Example:**
-
 ```bash
 curl -X GET 'http://localhost:3000/api/subscription/payment-methods' \
   -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
 ```
 
 **Response:**
-
 ```json
 {
   "status": "success",
@@ -1534,18 +1196,15 @@ curl -X GET 'http://localhost:3000/api/subscription/payment-methods' \
 ```
 
 #### DELETE /api/subscription/:subscriptionId
-
 Cancel a subscription at period end.
 
 **CURL Example:**
-
 ```bash
 curl -X DELETE 'http://localhost:3000/api/subscription/sub_abc123xyz789' \
   -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
 ```
 
 **Response:**
-
 ```json
 {
   "status": "success",
@@ -1563,11 +1222,9 @@ curl -X DELETE 'http://localhost:3000/api/subscription/sub_abc123xyz789' \
 ### Stripe Webhooks (Public)
 
 #### POST /api/webhooks/stripe
-
 Stripe webhook endpoint. Requires raw body and `stripe-signature` header. Do not call from frontend.
 
 **Webhook Events Handled:**
-
 - `checkout.session.completed` - Checkout session successfully completed
 - `customer.subscription.created` - New subscription created
 - `customer.subscription.updated` - Subscription updated (plan change, etc.)
@@ -1583,11 +1240,9 @@ For complete CURL examples and detailed documentation, see `docs/STRIPE_API_REFE
 ### MQTT Connection
 
 #### POST /connections
-
 Creates a new AWS IoT connection. The `brokerUrl` field is required by DTO but is currently ignored by the backend.
 
 Request:
-
 ```json
 {
   "brokerUrl": "mqtt://localhost:1883",
@@ -1597,7 +1252,6 @@ Request:
 ```
 
 Response:
-
 ```json
 {
   "message": "Connected successfully",
@@ -1606,11 +1260,9 @@ Response:
 ```
 
 #### DELETE /connections/:clientId
-
 Deletes the AWS IoT thing and disconnects the client.
 
 Response:
-
 ```json
 {
   "message": "Connection removed and machine deleted successfully"
@@ -1620,11 +1272,9 @@ Response:
 ### Machine Timestream (Internal)
 
 #### POST /machine-timestream
-
 Loads demo CSV data into AWS Timestream.
 
 Response:
-
 ```json
 {
   "success": true,
@@ -1635,11 +1285,9 @@ Response:
 ### Health (Public)
 
 #### GET /health
-
 System-wide health status.
 
 Response (example):
-
 ```json
 {
   "status": "healthy",
@@ -1657,7 +1305,6 @@ Response (example):
 ```
 
 #### GET /health/database | /health/influxdb | /health/redis | /health/mqtt | /health/websocket
-
 Service-specific health checks. Each returns:
 
 ```json
@@ -1672,15 +1319,12 @@ Service-specific health checks. Each returns:
 ```
 
 #### GET /health/demo
-
 Demo system status (includes integration summary and machine count).
 
 #### GET /health/config
-
 Exposes current configuration snapshot (safe values only).
 
 Response example (`/health/config`):
-
 ```json
 {
   "status": "ok",
@@ -1688,16 +1332,8 @@ Response example (`/health/config`):
   "environment": "development",
   "demoEnabled": true,
   "services": {
-    "postgres": {
-      "host": "localhost",
-      "port": 5432,
-      "database": "opcua_dashboard"
-    },
-    "influxdb": {
-      "url": "http://localhost:8086",
-      "org": "opcua-org",
-      "bucket": "machine-data"
-    },
+    "postgres": { "host": "localhost", "port": 5432, "database": "opcua_dashboard" },
+    "influxdb": { "url": "http://localhost:8086", "org": "opcua-org", "bucket": "machine-data" },
     "redis": { "host": "localhost", "port": 6379 },
     "mqtt": { "brokerUrl": "mqtt://localhost:1883" }
   }
@@ -1709,11 +1345,9 @@ Response example (`/health/config`):
 These endpoints are used for demo environments and local testing.
 
 #### GET /demo/status
-
 Returns demo status, service health summary, machine count.
 
 Response example:
-
 ```json
 {
   "status": "active",
@@ -1734,11 +1368,9 @@ Response example:
 ```
 
 #### GET /demo/machines
-
 Returns machine list with online/offline info.
 
 Response example:
-
 ```json
 {
   "machines": [
@@ -1760,11 +1392,9 @@ Response example:
 ```
 
 #### GET /demo/machines/:deviceId/status
-
 Returns cached status + tech configuration for a specific device.
 
 Response example:
-
 ```json
 {
   "machine": {
@@ -1782,11 +1412,9 @@ Response example:
 ```
 
 #### GET /demo/machines/:deviceId/realtime
-
 Returns realtime history from InfluxDB for a device.
 
 Response example:
-
 ```json
 {
   "deviceId": "Machine 1",
@@ -1798,11 +1426,9 @@ Response example:
 ```
 
 #### GET /demo/machines/:deviceId/spc
-
 Returns SPC history from InfluxDB for a device.
 
 Response example:
-
 ```json
 {
   "deviceId": "Machine 1",
@@ -1814,11 +1440,9 @@ Response example:
 ```
 
 #### GET /demo/queue/status
-
 Returns Redis queue lengths and processor status.
 
 Response example:
-
 ```json
 {
   "status": "active",
@@ -1834,11 +1458,9 @@ Response example:
 ```
 
 #### GET /demo/websocket/status
-
 Returns websocket connection/subscription counts.
 
 Response example:
-
 ```json
 {
   "status": "active",
@@ -1851,11 +1473,9 @@ Response example:
 ```
 
 #### POST /demo/mock-data/start
-
 Start mock data generation.
 
 Response example:
-
 ```json
 {
   "status": "started",
@@ -1866,11 +1486,9 @@ Response example:
 ```
 
 #### POST /demo/mock-data/stop
-
 Stop mock data generation.
 
 Response example:
-
 ```json
 {
   "status": "stopped",
@@ -1881,11 +1499,9 @@ Response example:
 ```
 
 #### GET /demo/mock-data/status
-
 Return mock data generator stats.
 
 Response example:
-
 ```json
 {
   "isGenerating": true,
@@ -1896,11 +1512,9 @@ Response example:
 ```
 
 #### POST /demo/influxdb/flush
-
 Flush InfluxDB buffer.
 
 Response example:
-
 ```json
 {
   "status": "flushed",
@@ -1910,11 +1524,9 @@ Response example:
 ```
 
 #### DELETE /demo/cache/clear
-
 Clear all machine caches.
 
 Response example:
-
 ```json
 {
   "status": "cleared",
@@ -1925,11 +1537,9 @@ Response example:
 ```
 
 #### DELETE /demo/cache/clear/:deviceId
-
 Clear cache for one machine.
 
 Response example:
-
 ```json
 {
   "status": "cleared",
@@ -1940,11 +1550,9 @@ Response example:
 ```
 
 #### GET /demo/metrics
-
 System metrics summary (health, machines, queues, websocket, mock data).
 
 Response example:
-
 ```json
 {
   "system": { "health": "healthy", "responseTime": 20, "uptime": 3600 },
@@ -1957,11 +1565,9 @@ Response example:
 ```
 
 #### GET /demo/logs/recent
-
 Returns a placeholder message (log retrieval is not implemented).
 
 Response example:
-
 ```json
 {
   "message": "Log retrieval not implemented in this demo",
@@ -1976,7 +1582,6 @@ Response example:
 Use for debugging only. Do not call from production frontend.
 
 #### GET /debug/redis/queue-lengths
-
 ```json
 {
   "success": true,
@@ -1988,75 +1593,47 @@ Use for debugging only. Do not call from production frontend.
 ```
 
 #### GET /debug/redis/peek-message/:queue
-
 ```json
-{
-  "message": { "topic": "device/realtime", "payload": {} },
-  "queue": "mqtt:realtime"
-}
+{ "message": { "topic": "device/realtime", "payload": {} }, "queue": "mqtt:realtime" }
 ```
 
 #### GET /debug/process/single-realtime
-
 ```json
-{
-  "success": true,
-  "processedMessage": { "payload": {} },
-  "remainingInQueue": 0
-}
+{ "success": true, "processedMessage": { "payload": {} }, "remainingInQueue": 0 }
 ```
 
 #### GET /debug/process/single-spc
-
 ```json
-{
-  "success": true,
-  "processedMessage": { "payload": {} },
-  "remainingInQueue": 0
-}
+{ "success": true, "processedMessage": { "payload": {} }, "remainingInQueue": 0 }
 ```
 
 #### GET /debug/influxdb/test-connection
-
 ```json
 { "success": true, "testData": { "devId": "test-device", "topic": "test" } }
 ```
 
 #### GET /debug/processor/status
-
 ```json
-{
-  "isConnected": true,
-  "processingStats": { "connected": true, "queueLengths": {} }
-}
+{ "isConnected": true, "processingStats": { "connected": true, "queueLengths": {} } }
 ```
 
 #### GET /debug/process/flush-all
-
 ```json
-{
-  "success": true,
-  "processedCount": 2,
-  "remainingQueues": { "mqtt:realtime": 0 }
-}
+{ "success": true, "processedCount": 2, "remainingQueues": { "mqtt:realtime": 0 } }
 ```
 
 #### GET /debug/simple-machine-check
-
 ```json
 {
   "success": true,
   "timestamp": "2025-01-15T10:00:00.000Z",
   "machineCount": 1,
-  "machines": [
-    { "id": 1, "name": "Machine 1", "ip": "192.168.1.100", "status": "running" }
-  ],
+  "machines": [{ "id": 1, "name": "Machine 1", "ip": "192.168.1.100", "status": "running" }],
   "targetMachineExists": false
 }
 ```
 
 #### GET /debug/comprehensive-diagnostic
-
 ```json
 {
   "timestamp": "2025-01-15T10:00:00.000Z",
@@ -2068,34 +1645,21 @@ Use for debugging only. Do not call from production frontend.
 ```
 
 #### GET /debug/subscription/user/:userId
-
 ```json
-{
-  "timestamp": "2025-01-15T10:00:00.000Z",
-  "userId": 1,
-  "database": {},
-  "stripe": {}
-}
+{ "timestamp": "2025-01-15T10:00:00.000Z", "userId": 1, "database": {}, "stripe": {} }
 ```
 
 #### POST /debug/subscription/sync/:userId
-
 ```json
 { "timestamp": "2025-01-15T10:00:00.000Z", "userId": 1, "success": true }
 ```
 
 #### GET /debug/subscription/database-state
-
 ```json
-{
-  "timestamp": "2025-01-15T10:00:00.000Z",
-  "totalSubscriptions": 0,
-  "subscriptions": []
-}
+{ "timestamp": "2025-01-15T10:00:00.000Z", "totalSubscriptions": 0, "subscriptions": [] }
 ```
 
 Common errors:
-
 - `500 Internal Server Error` when dependencies (Redis/Stripe) are unavailable.
 
 ## WebSocket Integration (Socket.IO)
@@ -2117,37 +1681,29 @@ Connection limits and timeouts:
 ### Client -> Server Events
 
 #### subscribe-machine
-
 Payload:
-
 ```json
 { "deviceId": "Machine 1" }
 ```
 
 #### unsubscribe-machine
-
 Payload:
-
 ```json
 { "deviceId": "Machine 1" }
 ```
 
 #### get-machine-status
-
 Payload:
-
 ```json
 { "deviceId": "Machine 1" }
 ```
 
 #### ping
-
 No payload. Used to keep the connection alive.
 
 ### Server -> Client Events
 
 #### connection
-
 Emitted after handshake.
 
 ```json
@@ -2161,13 +1717,11 @@ Emitted after handshake.
 ```
 
 #### subscription-confirmed | unsubscription-confirmed
-
 ```json
 { "deviceId": "Machine 1" }
 ```
 
 #### realtime-update
-
 ```json
 {
   "deviceId": "postgres machine 1",
@@ -2194,7 +1748,6 @@ Emitted after handshake.
 ```
 
 #### spc-update
-
 ```json
 {
   "deviceId": "Machine 1",
@@ -2214,60 +1767,7 @@ Emitted after handshake.
 }
 ```
 
-#### spc-series-update (chart + stats)
-
-Emits bucketed chart points plus updated stats/limits. Use this to keep SPC charts and overlays fresh without re-calling the series API for each point.
-
-```json
-{
-  "deviceId": "Machine 1",
-  "field": "cycle_time",
-  "window": {
-    "mode": "last_1h",
-    "start": "2026-01-20T03:31:12.398Z",
-    "end": "2026-01-20T04:31:12.398Z"
-  },
-  "sampling": {
-    "limit": 100,
-    "intervalMs": 36000,
-    "downsample": "avg"
-  },
-  "point": {
-    "kind": "bucketed",
-    "ts": "2026-01-20T04:30:40.517Z",
-    "value": 34.12
-  },
-  "stats": {
-    "count": 100,
-    "mean": 33.95,
-    "stdDev": 0.41,
-    "min": 32.88,
-    "max": 34.92,
-    "median": 33.91,
-    "p95": 34.6,
-    "source": "raw"
-  },
-  "limits": {
-    "ucl": 35.18,
-    "lcl": 32.72,
-    "mean": 33.95,
-    "sigma": 0.41,
-    "method": "xbar-3sigma"
-  },
-  "timestamp": "2026-01-20T04:31:12.398Z"
-}
-```
-
-Notes:
-
-- Emit interval differs by window: `intervalMs = (windowEnd - windowStart) / limit`.
-- The backend aggregates raw points into buckets; it emits only when a bucket closes or a debounce threshold is hit.
-- Stats/limits are computed from the raw rolling window, not the downsampled series.
-- Frontend should append the bucketed point and update overlays using `stats`/`limits`.
-- Re-fetch `/api/spc/series` every 5-10 minutes for long windows (24h/3d/7d) and on reconnect.
-
 #### machine-status
-
 ```json
 {
   "deviceId": "Machine 1",
@@ -2277,7 +1777,6 @@ Notes:
 ```
 
 #### machine-alert
-
 Alerts are generated server-side based on realtime data.
 
 ```json
@@ -2295,7 +1794,6 @@ Alerts are generated server-side based on realtime data.
 ```
 
 #### alarm-update
-
 Alarm/warning messages received from MQTT devices (`/wm` topic).
 
 ```json
@@ -2311,19 +1809,16 @@ Alarm/warning messages received from MQTT devices (`/wm` topic).
 ```
 
 #### pong
-
 ```json
 { "timestamp": "2025-01-15T10:00:00.000Z" }
 ```
 
 #### error
-
 ```json
 { "message": "Connection limit exceeded", "code": "CONNECTION_LIMIT_EXCEEDED" }
 ```
 
 Notes:
-
 - Only connection-limit errors include a `code`. Other errors include `message` only.
 - The gateway does not currently require auth for WebSocket connections.
 
@@ -2333,30 +1828,16 @@ These are log summaries you will see in backend output when demo data is flowing
 They are useful for debugging, but are not client-facing payloads.
 
 #### Parsed MQTT message (debug)
-
 ```json
 {
   "devId": "postgres machine 1",
   "topic": "realtime",
   "timestamp": 1767734969931,
-  "dataKeys": [
-    "OT",
-    "ASTS",
-    "OPM",
-    "STS",
-    "T1",
-    "T2",
-    "T3",
-    "T4",
-    "T5",
-    "T6",
-    "T7"
-  ]
+  "dataKeys": ["OT", "ASTS", "OPM", "STS", "T1", "T2", "T3", "T4", "T5", "T6", "T7"]
 }
 ```
 
 #### Broadcast payload summary (debug)
-
 ```json
 {
   "deviceId": "postgres machine 1",
@@ -2402,63 +1883,61 @@ Use this table to normalize telemetry between live WebSocket events and historic
 
 Realtime data:
 
-| Meaning            | MQTT (WebSocket payload) | InfluxDB (history payload) |
-| ------------------ | ------------------------ | -------------------------- |
-| Device ID          | `devId`                  | `device_id`                |
-| Oil temperature    | `Data.OT`                | `oil_temp`                 |
-| Auto start         | `Data.ASTS`              | `auto_start`               |
-| Operate mode       | `Data.OPM`               | `operate_mode`             |
-| Status             | `Data.STS`               | `status`                   |
-| Temperature zone 1 | `Data.T1`                | `temp_1`                   |
-| Temperature zone 2 | `Data.T2`                | `temp_2`                   |
-| Temperature zone 3 | `Data.T3`                | `temp_3`                   |
-| Temperature zone 4 | `Data.T4`                | `temp_4`                   |
-| Temperature zone 5 | `Data.T5`                | `temp_5`                   |
-| Temperature zone 6 | `Data.T6`                | `temp_6`                   |
-| Temperature zone 7 | `Data.T7`                | `temp_7`                   |
+| Meaning | MQTT (WebSocket payload) | InfluxDB (history payload) |
+| --- | --- | --- |
+| Device ID | `devId` | `device_id` |
+| Oil temperature | `Data.OT` | `oil_temp` |
+| Auto start | `Data.ASTS` | `auto_start` |
+| Operate mode | `Data.OPM` | `operate_mode` |
+| Status | `Data.STS` | `status` |
+| Temperature zone 1 | `Data.T1` | `temp_1` |
+| Temperature zone 2 | `Data.T2` | `temp_2` |
+| Temperature zone 3 | `Data.T3` | `temp_3` |
+| Temperature zone 4 | `Data.T4` | `temp_4` |
+| Temperature zone 5 | `Data.T5` | `temp_5` |
+| Temperature zone 6 | `Data.T6` | `temp_6` |
+| Temperature zone 7 | `Data.T7` | `temp_7` |
 
 SPC data:
 
-| Meaning                    | MQTT (WebSocket payload) | InfluxDB (history payload)   | Availability |
-| -------------------------- | ------------------------ | ---------------------------- | ------------ |
-| Device ID                  | `devId`                  | `device_id` (tag)            | Always       |
-| Cycle number               | `Data.CYCN`              | `cycle_number`               | Always       |
-| Cycle time                 | `Data.ECYCT`             | `cycle_time`                 | Always       |
-| Injection velocity max     | `Data.EIVM`              | `injection_velocity_max`     | Always       |
-| Injection pressure max     | `Data.EIPM`              | `injection_pressure_max`     | Always       |
-| Switch pack time           | `Data.ESIPT`             | `switch_pack_time`           | Always       |
-| Switch pack pressure       | `Data.ESIPP`             | `switch_pack_pressure`       | Optional     |
-| Switch pack position       | `Data.ESIPS`             | `switch_pack_position`       | Optional     |
-| Injection time             | `Data.EIPT`              | `injection_time`             | Optional     |
-| Plasticizing time          | `Data.EPLST`             | `plasticizing_time`          | Optional     |
-| Plasticizing pressure max  | `Data.EPLSPM`            | `plasticizing_pressure_max`  | Optional     |
-| Temperature zone 1         | `Data.ET1`               | `temp_1`                     | Always       |
-| Temperature zone 2         | `Data.ET2`               | `temp_2`                     | Always       |
-| Temperature zone 3         | `Data.ET3`               | `temp_3`                     | Always       |
-| Temperature zone 4         | `Data.ET4`               | `temp_4`                     | Optional     |
-| Temperature zone 5         | `Data.ET5`               | `temp_5`                     | Optional     |
-| Temperature zone 6         | `Data.ET6`               | `temp_6`                     | Optional     |
-| Temperature zone 7         | `Data.ET7`               | `temp_7`                     | Optional     |
-| Temperature zone 8         | `Data.ET8`               | `temp_8`                     | Optional     |
-| Temperature zone 9         | `Data.ET9`               | `temp_9`                     | Optional     |
-| Temperature zone 10        | `Data.ET10`              | `temp_10`                    | Optional     |
-| Injection pressure set     | `Data.EIPSE`             | `injection_pressure_set`     | Optional     |
-| Fill/cooling time          | `Data.EFCHT`             | `fill_cooling_time`          | Optional     |
-| Injection pressure set min | `Data.EIPSMIN`           | `injection_pressure_set_min` | Optional     |
-| Oil temperature (cycle)    | `Data.EOT`               | `oil_temperature_cycle`      | Optional     |
-| End mold open speed        | `Data.EMOS`              | `end_mold_open_speed`        | Optional     |
-| Injection start speed      | `Data.EISS`              | `injection_start_speed`      | Optional     |
+| Meaning | MQTT (WebSocket payload) | InfluxDB (history payload) | Availability |
+| --- | --- | --- | --- |
+| Device ID | `devId` | `device_id` (tag) | Always |
+| Cycle number | `Data.CYCN` | `cycle_number` | Always |
+| Cycle time | `Data.ECYCT` | `cycle_time` | Always |
+| Injection velocity max | `Data.EIVM` | `injection_velocity_max` | Always |
+| Injection pressure max | `Data.EIPM` | `injection_pressure_max` | Always |
+| Switch pack time | `Data.ESIPT` | `switch_pack_time` | Always |
+| Switch pack pressure | `Data.ESIPP` | `switch_pack_pressure` | Optional |
+| Switch pack position | `Data.ESIPS` | `switch_pack_position` | Optional |
+| Injection time | `Data.EIPT` | `injection_time` | Optional |
+| Plasticizing time | `Data.EPLST` | `plasticizing_time` | Optional |
+| Plasticizing pressure max | `Data.EPLSPM` | `plasticizing_pressure_max` | Optional |
+| Temperature zone 1 | `Data.ET1` | `temp_1` | Always |
+| Temperature zone 2 | `Data.ET2` | `temp_2` | Always |
+| Temperature zone 3 | `Data.ET3` | `temp_3` | Always |
+| Temperature zone 4 | `Data.ET4` | `temp_4` | Optional |
+| Temperature zone 5 | `Data.ET5` | `temp_5` | Optional |
+| Temperature zone 6 | `Data.ET6` | `temp_6` | Optional |
+| Temperature zone 7 | `Data.ET7` | `temp_7` | Optional |
+| Temperature zone 8 | `Data.ET8` | `temp_8` | Optional |
+| Temperature zone 9 | `Data.ET9` | `temp_9` | Optional |
+| Temperature zone 10 | `Data.ET10` | `temp_10` | Optional |
+| Injection pressure set | `Data.EIPSE` | `injection_pressure_set` | Optional |
+| Fill/cooling time | `Data.EFCHT` | `fill_cooling_time` | Optional |
+| Injection pressure set min | `Data.EIPSMIN` | `injection_pressure_set_min` | Optional |
+| Oil temperature (cycle) | `Data.EOT` | `oil_temperature_cycle` | Optional |
+| End mold open speed | `Data.EMOS` | `end_mold_open_speed` | Optional |
+| Injection start speed | `Data.EISS` | `injection_start_speed` | Optional |
 
 ### Field Availability Notes
 
 **Realtime Data:**
-
 - All 11 fields (`OT`, `ASTS`, `OPM`, `STS`, `T1`-`T7`) are always present in WebSocket updates
 - All 11 fields are stored in InfluxDB historical data
 - Field values are transmitted as numbers (parsed from DynamoDB format)
 
 **SPC Data:**
-
 - **Required fields** (always present): `CYCN`, `ECYCT`, `EIVM`, `EIPM`, `ESIPT`, `ET1`, `ET2`, `ET3`
 - **Optional InfluxDB fields** (may be present): `ESIPP`, `ESIPS`, `EIPT`, `EPLST`, `EPLSPM`, `EIPSE`, `EFCHT`, `EIPSMIN`, `EOT`, `EMOS`, `EISS`, `ET4`-`ET10`
 - Frontend should handle missing optional fields gracefully
@@ -2466,7 +1945,6 @@ SPC data:
 - All fields broadcast via WebSocket are now also stored in InfluxDB for historical analysis
 
 **Tech Data:**
-
 - Only available via Redis cache (accessed through `GET /machines/:id/status` which may include tech config)
 - Not broadcast via WebSocket realtime updates
 - Contains 50 fields organized as 5 arrays of 10 values each:
@@ -2569,17 +2047,15 @@ socket.emit('unsubscribe-machine', { deviceId: 'Machine 1' });
 ### Migration from Polling to WebSocket
 
 **Before (polling - slow):**
-
 ```typescript
 setInterval(() => {
   fetch(`/machines/${id}/realtime-history?timeRange=-5m`)
-    .then((res) => res.json())
-    .then((data) => updateChart(data));
+    .then(res => res.json())
+    .then(data => updateChart(data));
 }, 5000); // Poll every 5 seconds
 ```
 
 **After (WebSocket - instant):**
-
 ```typescript
 // Subscribe once
 socket.emit('subscribe-machine', { deviceId: id });
@@ -2610,7 +2086,7 @@ const timeRange = '-24h';
 const aggregate = '15m';
 
 const res = await fetch(
-  `/machines/${id}/realtime-history?timeRange=${timeRange}&aggregate=${aggregate}`,
+  `/machines/${id}/realtime-history?timeRange=${timeRange}&aggregate=${aggregate}`
 );
 const { data, aggregation } = await res.json();
 // Result: ~96 records instead of ~1440 records (if 1-min intervals)
@@ -2629,12 +2105,10 @@ Aggregated queries return significantly fewer records while preserving trends.
 For SPC charts, use the v2.0 endpoints:
 
 1. **Control Limits**: Use `/spc/limits` instead of calculating client-side
-
    - Cached for 30 minutes
    - Includes UCL, LCL, mean, stdDev
 
 2. **Historical Data**: Use `/spc/history-optimized` for large time ranges
-
    - Automatic downsampling based on time range
    - Field projection reduces payload size
 
@@ -2643,22 +2117,17 @@ For SPC charts, use the v2.0 endpoints:
    - Returns only requested fields
 
 Example complete SPC chart integration:
-
 ```typescript
 // Initial load
 const [limits, history, metadata] = await Promise.all([
-  fetch(`/machines/${id}/spc/limits?fields=cycle_time`).then((r) => r.json()),
-  fetch(
-    `/machines/${id}/spc/history-optimized?from=${dayAgo}&to=${now}&fields=cycle_time`,
-  ).then((r) => r.json()),
-  fetch(`/machines/${id}/spc/metadata`).then((r) => r.json()),
+  fetch(`/machines/${id}/spc/limits?fields=cycle_time`).then(r => r.json()),
+  fetch(`/machines/${id}/spc/history-optimized?from=${dayAgo}&to=${now}&fields=cycle_time`).then(r => r.json()),
+  fetch(`/machines/${id}/spc/metadata`).then(r => r.json())
 ]);
 
 // Real-time polling (10-second cache friendly)
 setInterval(async () => {
-  const latest = await fetch(`/machines/${id}/spc/latest?count=1`).then((r) =>
-    r.json(),
-  );
+  const latest = await fetch(`/machines/${id}/spc/latest?count=1`).then(r => r.json());
   updateChart(latest.data[0]);
 }, 10000);
 ```
@@ -2669,10 +2138,7 @@ setInterval(async () => {
 
 ```ts
 export class ApiClient {
-  constructor(
-    private baseUrl: string,
-    private token?: string,
-  ) {}
+  constructor(private baseUrl: string, private token?: string) {}
 
   setToken(token: string) {
     this.token = token;

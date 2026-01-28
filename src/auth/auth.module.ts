@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
+import { GoogleAuthService } from './google-auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserModule } from '../user/user.module';
 import { JwtModule } from '@nestjs/jwt';
@@ -8,10 +9,12 @@ import { MailerModule } from '@nestjs-modules/mailer';
 import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { emailAddress, emailPassword } from './strategies/constants';
+import { EmailModule } from '../email/email.module';
 @Module({
   imports: [
     UserModule,
     PassportModule,
+    EmailModule,
     MailerModule.forRoot({
       transport: {
         host: 'smtp.gmail.com', // Gmail's SMTP server
@@ -34,7 +37,7 @@ import { emailAddress, emailPassword } from './strategies/constants';
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, GoogleAuthService, JwtStrategy],
   controllers: [AuthController],
   exports: [AuthService],
 })

@@ -1,0 +1,38 @@
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+
+# Dependency directories
+node_modules/
+
+# TypeScript compiled files
+*.js
+*.d.ts
+
+# Logs
+*.log
+
+# CDK Context & Staging files
+cdk.context.json
+
+# Environment variables
+.env
+.env.local
+
+# Deployment outputs
+outputs.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Package manager files
+package-lock.json
+yarn.lock

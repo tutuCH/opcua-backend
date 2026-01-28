@@ -46,23 +46,13 @@ describe('SPCLimitsService', () => {
     it('should calculate limits from InfluxDB when cache miss', async () => {
       mockRedisService.get.mockResolvedValue(null);
 
-      const result = await service.getLimits(
-        'M1',
-        ['cycle_time'],
-        '24h',
-        3,
-        false,
-      );
+      const result = await service.getLimits('M1', ['cycle_time'], '24h', 3, false);
 
       expect(result.limits.cycle_time).toBeDefined();
       expect(result.limits.cycle_time.mean).toBeCloseTo(12.24, 1);
       expect(result.limits.cycle_time.stdDev).toBeGreaterThan(0);
-      expect(result.limits.cycle_time.ucl).toBeGreaterThan(
-        result.limits.cycle_time.mean,
-      );
-      expect(result.limits.cycle_time.lcl).toBeLessThan(
-        result.limits.cycle_time.mean,
-      );
+      expect(result.limits.cycle_time.ucl).toBeGreaterThan(result.limits.cycle_time.mean);
+      expect(result.limits.cycle_time.lcl).toBeLessThan(result.limits.cycle_time.mean);
       expect(result.limits.cycle_time.n).toBe(5);
       expect(result.limits.cycle_time.isCached).toBe(false);
       expect(result.metadata.deviceId).toBe('M1');
@@ -84,13 +74,7 @@ describe('SPCLimitsService', () => {
       };
       mockRedisService.get.mockResolvedValue(cachedLimits);
 
-      const result = await service.getLimits(
-        'M1',
-        ['cycle_time'],
-        '24h',
-        3,
-        false,
-      );
+      const result = await service.getLimits('M1', ['cycle_time'], '24h', 3, false);
 
       expect(result.limits.cycle_time.isCached).toBe(true);
       expect(result.limits.cycle_time.mean).toBe(12.5);
@@ -120,9 +104,7 @@ describe('SPCLimitsService', () => {
     });
 
     it('should throw error when insufficient data', async () => {
-      mockInfluxDBService.querySPCData.mockResolvedValue([
-        { cycle_time: 12.0 },
-      ]);
+      mockInfluxDBService.querySPCData.mockResolvedValue([{ cycle_time: 12.0 }]);
 
       await expect(
         service.getLimits('M1', ['cycle_time'], '24h', 3, false),
@@ -175,43 +157,17 @@ describe('SPCLimitsService', () => {
     it('should respect different sigma values', async () => {
       mockRedisService.get.mockResolvedValue(null);
 
-      const result2Sigma = await service.getLimits(
-        'M1',
-        ['cycle_time'],
-        '24h',
-        2,
-        false,
-      );
-      const result3Sigma = await service.getLimits(
-        'M1',
-        ['cycle_time'],
-        '24h',
-        3,
-        false,
-      );
-      const result4Sigma = await service.getLimits(
-        'M1',
-        ['cycle_time'],
-        '24h',
-        4,
-        false,
-      );
+      const result2Sigma = await service.getLimits('M1', ['cycle_time'], '24h', 2, false);
+      const result3Sigma = await service.getLimits('M1', ['cycle_time'], '24h', 3, false);
+      const result4Sigma = await service.getLimits('M1', ['cycle_time'], '24h', 4, false);
 
       // UCL should increase with higher sigma
-      expect(result2Sigma.limits.cycle_time.ucl).toBeLessThan(
-        result3Sigma.limits.cycle_time.ucl,
-      );
-      expect(result3Sigma.limits.cycle_time.ucl).toBeLessThan(
-        result4Sigma.limits.cycle_time.ucl,
-      );
+      expect(result2Sigma.limits.cycle_time.ucl).toBeLessThan(result3Sigma.limits.cycle_time.ucl);
+      expect(result3Sigma.limits.cycle_time.ucl).toBeLessThan(result4Sigma.limits.cycle_time.ucl);
 
       // LCL should decrease with higher sigma
-      expect(result2Sigma.limits.cycle_time.lcl).toBeGreaterThan(
-        result3Sigma.limits.cycle_time.lcl,
-      );
-      expect(result3Sigma.limits.cycle_time.lcl).toBeGreaterThan(
-        result4Sigma.limits.cycle_time.lcl,
-      );
+      expect(result2Sigma.limits.cycle_time.lcl).toBeGreaterThan(result3Sigma.limits.cycle_time.lcl);
+      expect(result3Sigma.limits.cycle_time.lcl).toBeGreaterThan(result4Sigma.limits.cycle_time.lcl);
     });
   });
 
@@ -231,19 +187,10 @@ describe('SPCLimitsService', () => {
       };
       mockRedisService.get.mockResolvedValue(existingLimits);
 
-      await service.updateLimitsWithNewPoint(
-        'M1',
-        'cycle_time',
-        12.5,
-        '24h',
-        3,
-      );
+      await service.updateLimitsWithNewPoint('M1', 'cycle_time', 12.5, '24h', 3);
 
       expect(mockRedisService.set).toHaveBeenCalled();
-      const savedLimits = mockRedisService.set.mock.calls[0][1] as Record<
-        string,
-        any
-      >;
+      const savedLimits = mockRedisService.set.mock.calls[0][1] as Record<string, any>;
       expect(savedLimits.cycle_time.n).toBe(6);
       expect(savedLimits.cycle_time.mean).toBeCloseTo(12.08, 1);
     });
@@ -251,13 +198,7 @@ describe('SPCLimitsService', () => {
     it('should return early if no cached limits exist', async () => {
       mockRedisService.get.mockResolvedValue(null);
 
-      await service.updateLimitsWithNewPoint(
-        'M1',
-        'cycle_time',
-        12.5,
-        '24h',
-        3,
-      );
+      await service.updateLimitsWithNewPoint('M1', 'cycle_time', 12.5, '24h', 3);
 
       expect(mockRedisService.set).not.toHaveBeenCalled();
     });
@@ -277,13 +218,7 @@ describe('SPCLimitsService', () => {
       };
       mockRedisService.get.mockResolvedValue(existingLimits);
 
-      await service.updateLimitsWithNewPoint(
-        'M1',
-        'cycle_time',
-        12.5,
-        '24h',
-        3,
-      );
+      await service.updateLimitsWithNewPoint('M1', 'cycle_time', 12.5, '24h', 3);
 
       expect(mockRedisService.set).not.toHaveBeenCalled();
     });
@@ -298,10 +233,7 @@ describe('SPCLimitsService', () => {
     });
 
     it('should delete cache keys for multiple fields', async () => {
-      await service.invalidateCache('M1', [
-        'cycle_time',
-        'injection_velocity_max',
-      ]);
+      await service.invalidateCache('M1', ['cycle_time', 'injection_velocity_max']);
 
       // 4 lookbacks × 3 sigmas = 12 keys
       expect(mockRedisService.del).toHaveBeenCalledTimes(12);
@@ -339,19 +271,11 @@ describe('SPCLimitsService', () => {
       mockInfluxDBService.querySPCData.mockResolvedValue(multiFieldData);
       mockRedisService.get.mockResolvedValue(null);
 
-      await service.getLimits(
-        'M1',
-        ['injection_velocity_max', 'cycle_time'],
-        '24h',
-        3,
-        false,
-      );
+      await service.getLimits('M1', ['injection_velocity_max', 'cycle_time'], '24h', 3, false);
 
       expect(mockRedisService.get).toHaveBeenCalled();
       const cacheKey = mockRedisService.get.mock.calls[0][0];
-      expect(cacheKey).toBe(
-        'spc:limits:M1:cycle_time,injection_velocity_max:24h:sigma3',
-      );
+      expect(cacheKey).toBe('spc:limits:M1:cycle_time,injection_velocity_max:24h:sigma3');
     });
 
     it('should save to cache with correct TTL', async () => {

@@ -1,48 +1,55 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Launches the EC2 instance and deploys the app container using user-data
-# Requires scripts/setup.sh to have been run (reads scripts/.deploy_state)
+# One-step EC2 deployment using Docker Compose
+# Runs scripts/setup.sh automatically when needed, then launches the instance.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 STATE_FILE="$SCRIPT_DIR/.deploy_state"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-[[ -f "$STATE_FILE" ]] || { echo "State file not found: $STATE_FILE. Run scripts/setup.sh first."; exit 1; }
+if [[ ! -f "$STATE_FILE" ]]; then
+  echo "State file not found. Running scripts/setup.sh..."
+  "$SCRIPT_DIR/setup.sh"
+fi
+
 source "$STATE_FILE"
 
-# Repo info (override via env):
-# Default to provided backend repo at root
 REPO_URL=${REPO_URL:-https://github.com/tutuCH/opcua-backend}
 REPO_SUBDIR=${REPO_SUBDIR:-}
+COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE:-$ROOT_DIR/.env.compose}
 
-# App env to embed in instance via user-data. Read from .env.ec2 in project root by default.
-ENV_FILE=${ENV_FILE:-$(cd "$SCRIPT_DIR/.." && pwd)/.env.ec2}
-
-if [[ ! -f "$ENV_FILE" ]]; then
-  echo "Missing env file: $ENV_FILE"
-  echo "Create it from .env.ec2.example and fill real values."
+if [[ ! -f "$COMPOSE_ENV_FILE" ]]; then
+  echo "Missing compose env file: $COMPOSE_ENV_FILE"
+  echo "Create it: cp .env.compose.example .env.compose and edit secrets."
   exit 1
 fi
 
-ENV_B64=$(base64 < "$ENV_FILE" | tr -d '\n')
+ENV_B64=$(base64 < "$COMPOSE_ENV_FILE" | tr -d '\n')
 
-USER_DATA="$SCRIPT_DIR/.user-data.sh"
+USER_DATA="$SCRIPT_DIR/.user-data-compose.sh"
 cat > "$USER_DATA" <<UDEOF
 #!/bin/bash -xe
 dnf update -y
-dnf install -y docker git
+dnf install -y docker git curl
 systemctl enable --now docker
+
+if ! command -v docker-compose >/dev/null 2>&1; then
+  curl -L "https://github.com/docker/compose/releases/download/v2.27.1/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+  chmod +x /usr/local/bin/docker-compose
+fi
 
 mkdir -p /opt/app && cd /opt/app
 git clone "$REPO_URL" src || (cd src && git pull)
 cd src
 if [ -n "$REPO_SUBDIR" ] && [ -d "$REPO_SUBDIR" ]; then cd "$REPO_SUBDIR"; fi
 
-echo "$ENV_B64" | base64 -d > .env
+echo "$ENV_B64" | base64 -d > .env.compose
 
-docker build -t opcua-backend:latest .
-docker rm -f opcua-backend || true
-docker run -d --name opcua-backend --env-file .env -p 80:3000 --restart unless-stopped opcua-backend:latest
+/usr/local/bin/docker-compose version || true
+/usr/local/bin/docker-compose pull || true
+/usr/local/bin/docker-compose build --no-cache backend
+/usr/local/bin/docker-compose up -d
 UDEOF
 
 echo "Launching instance in $REGION ..."
@@ -63,10 +70,9 @@ aws ec2 wait instance-status-ok --region "$REGION" --instance-ids "$INSTANCE_ID"
 PUBLIC_IP=$(aws ec2 describe-instances --region "$REGION" --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
 echo "Public IP: $PUBLIC_IP"
 
-# Save into state
 cat >> "$STATE_FILE" <<EOF
-INSTANCE_ID=$INSTANCE_ID
-PUBLIC_IP=$PUBLIC_IP
+COMPOSE_INSTANCE_ID=$INSTANCE_ID
+COMPOSE_PUBLIC_IP=$PUBLIC_IP
 REPO_URL=$REPO_URL
 REPO_SUBDIR=$REPO_SUBDIR
 EOF
@@ -78,8 +84,9 @@ for i in {1..30}; do
     exit 0
   fi
   sleep 10
-done
+  done
 
 echo "Timed out waiting for health endpoint. You can check logs with:"
-echo "ssh -i ${KEY_NAME}.pem ec2-user@$PUBLIC_IP 'docker logs --tail 200 opcua-backend'"
+echo "ssh -i ${KEY_NAME}.pem ec2-user@$PUBLIC_IP 'docker compose ps && docker compose logs --tail 200 backend'"
 exit 1
+

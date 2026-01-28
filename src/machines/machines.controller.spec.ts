@@ -144,32 +144,13 @@ describe('MachinesController', () => {
       it('should accept multiple valid fields', async () => {
         const mockLimits = {
           limits: {
-            cycle_time: {
-              mean: 12.5,
-              stdDev: 0.8,
-              ucl: 14.9,
-              lcl: 10.1,
-              n: 100,
-              calculatedAt: '2026-01-18T10:00:00Z',
-              expiresAt: '2026-01-18T10:30:00Z',
-              isCached: false,
-            },
-            injection_velocity_max: {
-              mean: 84.5,
-              stdDev: 2.3,
-              ucl: 91.4,
-              lcl: 77.6,
-              n: 100,
-              calculatedAt: '2026-01-18T10:00:00Z',
-              expiresAt: '2026-01-18T10:30:00Z',
-              isCached: false,
-            },
+            cycle_time: { mean: 12.5, stdDev: 0.8, ucl: 14.9, lcl: 10.1, n: 100, calculatedAt: '2026-01-18T10:00:00Z', expiresAt: '2026-01-18T10:30:00Z', isCached: false },
+            injection_velocity_max: { mean: 84.5, stdDev: 2.3, ucl: 91.4, lcl: 77.6, n: 100, calculatedAt: '2026-01-18T10:00:00Z', expiresAt: '2026-01-18T10:30:00Z', isCached: false },
           },
           metadata: {
             deviceId: 'TestMachine',
             calculationTime: '50ms',
-            cacheKey:
-              'spc:limits:TestMachine:cycle_time,injection_velocity_max:24h:sigma3',
+            cacheKey: 'spc:limits:TestMachine:cycle_time,injection_velocity_max:24h:sigma3',
           },
         };
 
@@ -342,12 +323,10 @@ describe('MachinesController', () => {
           { _time: '2026-01-18T09:30:00Z', oil_temp: 52.5 },
         ];
 
-        jest
-          .spyOn(
-            influxDbService,
-            'queryRealtimeDataWithIntelligentDownsampling',
-          )
-          .mockResolvedValue(mockData);
+        jest.spyOn(
+          influxDbService,
+          'queryRealtimeDataWithIntelligentDownsampling',
+        ).mockResolvedValue(mockData);
 
         const result = await controller.getRealtimeHistoryOptimized(
           '1',
