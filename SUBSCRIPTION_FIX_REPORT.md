@@ -204,7 +204,7 @@ stripe listen --forward-to localhost:3000/api/webhooks/stripe \
 **Output**:
 
 ```
-Ready! Your webhook signing secret is whsec_282b3763fe4a23a46e87ef8bf4874bafc95294ee3ac654c2e43a8c50b9fffbb2
+Ready! Your webhook signing secret is whsec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 #### Step 2: Update Environment Configuration
