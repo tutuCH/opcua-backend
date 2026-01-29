@@ -42,6 +42,9 @@ export class RealtimeStreamService implements OnModuleInit, OnModuleDestroy {
   private readonly connections = new Map<string, StreamConnection>();
   private readonly connectionsByIp = new Map<string, number>();
   private readonly deviceSubscriptions = new Map<string, Set<string>>();
+  private readonly activeConnectionsByDeviceId = new Map<string, number>();
+  private readonly activeConnectionsByUserDevice = new Map<string, number>();
+  private activeConnectionsTotal = 0;
   private readonly maxConnectionsPerIp = 5;
 
   constructor(private readonly redisService: RedisService) {}
@@ -55,6 +58,9 @@ export class RealtimeStreamService implements OnModuleInit, OnModuleDestroy {
     this.connections.clear();
     this.connectionsByIp.clear();
     this.deviceSubscriptions.clear();
+    this.activeConnectionsByDeviceId.clear();
+    this.activeConnectionsByUserDevice.clear();
+    this.activeConnectionsTotal = 0;
   }
 
   events$(): Observable<StreamEvent> {
@@ -155,6 +161,7 @@ export class RealtimeStreamService implements OnModuleInit, OnModuleDestroy {
       deviceIds,
       connectedAt: new Date(),
     });
+    this.activeConnectionsTotal += 1;
 
     // Update device subscriptions (only for data streams)
     if (purpose === 'data') {
@@ -162,6 +169,13 @@ export class RealtimeStreamService implements OnModuleInit, OnModuleDestroy {
         const subSet = this.deviceSubscriptions.get(deviceId) || new Set();
         subSet.add(connectionId);
         this.deviceSubscriptions.set(deviceId, subSet);
+
+        const deviceCount = this.activeConnectionsByDeviceId.get(deviceId) || 0;
+        this.activeConnectionsByDeviceId.set(deviceId, deviceCount + 1);
+
+        const userDeviceKey = `${userId}:${deviceId}`;
+        const userDeviceCount = this.activeConnectionsByUserDevice.get(userDeviceKey) || 0;
+        this.activeConnectionsByUserDevice.set(userDeviceKey, userDeviceCount + 1);
       });
     }
 
@@ -193,9 +207,25 @@ export class RealtimeStreamService implements OnModuleInit, OnModuleDestroy {
           this.deviceSubscriptions.delete(deviceId);
         }
       }
+
+      const deviceCount = (this.activeConnectionsByDeviceId.get(deviceId) || 1) - 1;
+      if (deviceCount <= 0) {
+        this.activeConnectionsByDeviceId.delete(deviceId);
+      } else {
+        this.activeConnectionsByDeviceId.set(deviceId, deviceCount);
+      }
+
+      const userDeviceKey = `${connection.userId}:${deviceId}`;
+      const userDeviceCount = (this.activeConnectionsByUserDevice.get(userDeviceKey) || 1) - 1;
+      if (userDeviceCount <= 0) {
+        this.activeConnectionsByUserDevice.delete(userDeviceKey);
+      } else {
+        this.activeConnectionsByUserDevice.set(userDeviceKey, userDeviceCount);
+      }
     });
 
     this.connections.delete(connectionId);
+    this.activeConnectionsTotal = Math.max(0, this.activeConnectionsTotal - 1);
 
     this.logger.log(
       `Connection unregistered: ${connectionId} (user: ${connection.userId}, purpose: ${connection.purpose})`
@@ -204,6 +234,29 @@ export class RealtimeStreamService implements OnModuleInit, OnModuleDestroy {
 
   getConnectedClientsCount(): number {
     return this.connections.size;
+  }
+
+  getActiveConnectionsTotal(): number {
+    return this.activeConnectionsTotal;
+  }
+
+  getActiveConnectionsByDeviceId(): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const [deviceId, count] of this.activeConnectionsByDeviceId.entries()) {
+      result[deviceId] = count;
+    }
+    return result;
+  }
+
+  getActiveConnectionsByUserDevice(userId: number): Record<string, number> {
+    const result: Record<string, number> = {};
+    const prefix = `${userId}:`;
+    for (const [key, count] of this.activeConnectionsByUserDevice.entries()) {
+      if (!key.startsWith(prefix)) continue;
+      const deviceId = key.slice(prefix.length);
+      result[deviceId] = count;
+    }
+    return result;
   }
 
   getMachineSubscriptions(): Record<string, number> {

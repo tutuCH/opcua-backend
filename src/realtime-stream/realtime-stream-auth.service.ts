@@ -76,12 +76,12 @@ export class RealtimeStreamAuthService {
     ticket?: string;
     authorization?: string;
     purpose?: 'alerts' | 'data';
-  }): Promise<{ userId: number; ticketPurpose: string }> {
+  }): Promise<{ userId: number; ticketPurpose: string; ticketId?: string }> {
     const { ticket, authorization, purpose } = options;
 
     if (ticket) {
       const result = await this.verifyStreamTicket(ticket, purpose);
-      return { userId: result.userId, ticketPurpose: result.purpose };
+      return { userId: result.userId, ticketPurpose: result.purpose, ticketId: result.ticketId };
     }
 
     if (authorization) {
@@ -95,7 +95,7 @@ export class RealtimeStreamAuthService {
   private async verifyStreamTicket(
     ticket: string,
     requiredPurpose?: 'alerts' | 'data'
-  ): Promise<{ userId: number; purpose: string }> {
+  ): Promise<{ userId: number; purpose: string; ticketId?: string }> {
     try {
       const payload = this.jwtService.verify(ticket);
 
@@ -139,7 +139,7 @@ export class RealtimeStreamAuthService {
         throw new UnauthorizedException('Invalid stream ticket');
       }
 
-      return { userId, purpose: ticketData.purpose };
+      return { userId, purpose: ticketData.purpose, ticketId };
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;

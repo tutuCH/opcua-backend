@@ -46,7 +46,7 @@ export class RealtimeStreamController {
     @Query('ticket') ticket?: string,
   ): Promise<Observable<MessageEvent>> {
     // Authenticate user
-    const { userId } = await this.streamAuthService.resolveUserId({
+    const { userId, ticketId } = await this.streamAuthService.resolveUserId({
       ticket,
       authorization: req.headers.authorization,
       purpose: 'alerts',
@@ -57,12 +57,18 @@ export class RealtimeStreamController {
     // Check connection limits
     if (!this.streamService.canAcceptConnection(userId, 'alerts', clientIp)) {
       const stats = this.streamService.getConnectionStats(userId);
+      const activeConnectionsTotal = this.streamService.getActiveConnectionsTotal();
+      const activeConnectionsByDeviceId = this.streamService.getActiveConnectionsByDeviceId();
+      const activeConnectionsByUserDevice = this.streamService.getActiveConnectionsByUserDevice(userId);
       throw new HttpException(
         {
           statusCode: 429,
           message: `Alert stream connection limit exceeded`,
           error: 'Too Many Requests',
           currentConnections: stats,
+          activeConnectionsTotal,
+          activeConnectionsByDeviceId,
+          activeConnectionsByUserDevice,
           limits: { perIp: this.streamService.getMaxConnectionsPerIp() },
         },
         HttpStatus.TOO_MANY_REQUESTS,
@@ -76,7 +82,15 @@ export class RealtimeStreamController {
       this.streamService.registerConnection(connectionId, clientIp, userId, 'alerts', []);
 
       this.logger.log(
-        `Alert stream connected: ${connectionId} (user: ${userId}, ip: ${clientIp})`
+        JSON.stringify({
+          event: 'sse.connect',
+          timestamp: new Date().toISOString(),
+          connectionId,
+          userId,
+          ticketId,
+          ip: clientIp,
+          purpose: 'alerts',
+        })
       );
 
       // Subscribe to alert events (no device filtering)
@@ -118,7 +132,17 @@ export class RealtimeStreamController {
         eventsSubscription.unsubscribe();
         heartbeatSubscription.unsubscribe();
         this.streamService.unregisterConnection(connectionId);
-        this.logger.log(`Alert stream disconnected: ${connectionId}`);
+        this.logger.log(
+          JSON.stringify({
+            event: 'sse.disconnect',
+            timestamp: new Date().toISOString(),
+            connectionId,
+            userId,
+            ticketId,
+            ip: clientIp,
+            purpose: 'alerts',
+          })
+        );
       };
     });
   }
@@ -157,7 +181,7 @@ export class RealtimeStreamController {
     }
 
     // Authenticate user
-    const { userId } = await this.streamAuthService.resolveUserId({
+    const { userId, ticketId } = await this.streamAuthService.resolveUserId({
       ticket,
       authorization: req.headers.authorization,
       purpose: 'data',
@@ -184,12 +208,18 @@ export class RealtimeStreamController {
     // Check connection limits
     if (!this.streamService.canAcceptConnection(userId, 'data', clientIp)) {
       const stats = this.streamService.getConnectionStats(userId);
+      const activeConnectionsTotal = this.streamService.getActiveConnectionsTotal();
+      const activeConnectionsByDeviceId = this.streamService.getActiveConnectionsByDeviceId();
+      const activeConnectionsByUserDevice = this.streamService.getActiveConnectionsByUserDevice(userId);
       throw new HttpException(
         {
           statusCode: 429,
           message: `Data stream connection limit exceeded`,
           error: 'Too Many Requests',
           currentConnections: stats,
+          activeConnectionsTotal,
+          activeConnectionsByDeviceId,
+          activeConnectionsByUserDevice,
           limits: { perIp: this.streamService.getMaxConnectionsPerIp() },
         },
         HttpStatus.TOO_MANY_REQUESTS,
@@ -204,7 +234,16 @@ export class RealtimeStreamController {
       this.streamService.registerConnection(connectionId, clientIp, userId, 'data', deviceIds);
 
       this.logger.log(
-        `Data stream connected: ${connectionId} (user: ${userId}, devices: ${deviceIds.join(',')}, ip: ${clientIp})`
+        JSON.stringify({
+          event: 'sse.connect',
+          timestamp: new Date().toISOString(),
+          connectionId,
+          userId,
+          ticketId,
+          ip: clientIp,
+          purpose: 'data',
+          deviceIds,
+        })
       );
 
       // Send initial machine status if requested
@@ -265,7 +304,18 @@ export class RealtimeStreamController {
         eventsSubscription.unsubscribe();
         heartbeatSubscription.unsubscribe();
         this.streamService.unregisterConnection(connectionId);
-        this.logger.log(`Data stream disconnected: ${connectionId}`);
+        this.logger.log(
+          JSON.stringify({
+            event: 'sse.disconnect',
+            timestamp: new Date().toISOString(),
+            connectionId,
+            userId,
+            ticketId,
+            ip: clientIp,
+            purpose: 'data',
+            deviceIds,
+          })
+        );
       };
     });
   }
@@ -317,11 +367,17 @@ export class RealtimeStreamController {
 
     const stats = this.streamService.getConnectionStats(userId);
     const connections = this.streamService.getUserConnections(userId);
+    const activeConnectionsTotal = this.streamService.getActiveConnectionsTotal();
+    const activeConnectionsByDeviceId = this.streamService.getActiveConnectionsByDeviceId();
+    const activeConnectionsByUserDevice = this.streamService.getActiveConnectionsByUserDevice(userId);
 
     return {
       userId,
       ticketPurpose,
       connections: stats,
+      activeConnectionsTotal,
+      activeConnectionsByDeviceId,
+      activeConnectionsByUserDevice,
       limits: { perIp: this.streamService.getMaxConnectionsPerIp() },
       activeConnections: connections.map(conn => ({
         id: conn.id,
