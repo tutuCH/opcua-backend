@@ -10,6 +10,7 @@ import {
   Res,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { MachinesService } from './machines.service';
@@ -25,6 +26,8 @@ import { ALLOWED_SPC_FIELDS } from './constants/spc-fields';
 
 @Controller('machines')
 export class MachinesController {
+  private readonly logger = new Logger(MachinesController.name);
+
   constructor(
     private readonly machinesService: MachinesService,
     private readonly influxDbService: InfluxDBService,
@@ -339,6 +342,25 @@ export class MachinesController {
           fluxStop,
         ),
       ]);
+
+      this.logger.debug(
+        JSON.stringify({
+          event: 'spc.history.query',
+          machineId: id,
+          deviceId: machine.machineName,
+          timeRange,
+          start,
+          end,
+          fluxStart,
+          fluxStop,
+          metadataRange,
+          order: 'desc',
+          limit: pageSize,
+          offset: pageOffset,
+          returned: data.length,
+          rangeIsUtc: metadataRange?.includes('Z'),
+        }),
+      );
 
       return {
         data,

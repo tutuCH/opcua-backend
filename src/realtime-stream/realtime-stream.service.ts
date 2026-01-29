@@ -7,6 +7,7 @@ import {
 import { Observable, Subject } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { RedisService } from '../redis/redis.service';
+import { selectStreamTimestamp } from './stream-timestamp';
 
 export type StreamPurpose = 'alerts' | 'data';
 
@@ -321,13 +322,30 @@ export class RealtimeStreamService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
+      const emittedAt = new Date().toISOString();
+      const timestampSelection = selectStreamTimestamp(message.data);
+      this.logger.debug(
+        JSON.stringify({
+          event: 'sse.emit',
+          type: 'realtime-update',
+          deviceId: message.deviceId,
+          emittedAt,
+          emittedAtMs: Date.parse(emittedAt),
+          timestampSelection,
+          sampleData: {
+            ECYCT: message.data?.Data?.ECYCT,
+            OT: message.data?.Data?.OT,
+          },
+        }),
+      );
+
       this.publish({
         type: 'realtime-update',
         deviceId: message.deviceId,
         data: {
           deviceId: message.deviceId,
           data: message.data,
-          timestamp: new Date().toISOString(),
+          timestamp: emittedAt,
         },
       });
     });
@@ -337,13 +355,30 @@ export class RealtimeStreamService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
+      const emittedAt = new Date().toISOString();
+      const timestampSelection = selectStreamTimestamp(message.data);
+      this.logger.debug(
+        JSON.stringify({
+          event: 'sse.emit',
+          type: 'spc-update',
+          deviceId: message.deviceId,
+          emittedAt,
+          emittedAtMs: Date.parse(emittedAt),
+          timestampSelection,
+          sampleData: {
+            ECYCT: message.data?.Data?.ECYCT,
+            CYCN: message.data?.Data?.CYCN,
+          },
+        }),
+      );
+
       this.publish({
         type: 'spc-update',
         deviceId: message.deviceId,
         data: {
           deviceId: message.deviceId,
           data: message.data,
-          timestamp: new Date().toISOString(),
+          timestamp: emittedAt,
         },
       });
     });

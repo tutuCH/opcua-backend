@@ -109,6 +109,48 @@ export class SPCSeriesService {
       downsample,
     );
 
+    if (series.length > 0) {
+      const first = series[0];
+      const last = series[series.length - 1];
+      this.logger.debug(
+        JSON.stringify({
+          event: 'spc.series.query',
+          machineName,
+          field,
+          windowStart: windowRange.start,
+          windowEnd: windowRange.end,
+          order,
+          downsample,
+          limit: safeLimit,
+          intervalMs,
+          returned: series.length,
+          firstTs: first.ts,
+          lastTs: last.ts,
+          firstEpochMs: Date.parse(first.ts),
+          lastEpochMs: Date.parse(last.ts),
+          windowStartUtc: windowRange.start.endsWith('Z'),
+          windowEndUtc: windowRange.end.endsWith('Z'),
+        }),
+      );
+    } else {
+      this.logger.debug(
+        JSON.stringify({
+          event: 'spc.series.query',
+          machineName,
+          field,
+          windowStart: windowRange.start,
+          windowEnd: windowRange.end,
+          order,
+          downsample,
+          limit: safeLimit,
+          intervalMs,
+          returned: 0,
+          windowStartUtc: windowRange.start.endsWith('Z'),
+          windowEndUtc: windowRange.end.endsWith('Z'),
+        }),
+      );
+    }
+
     const values = series.map((point) => point.value);
 
     const stats = includeStats ? this.calculateStats(values) : null;
