@@ -6,6 +6,7 @@ import { UserOwnershipGuard } from './auth/strategies/user.ownership.guard';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
 import * as compression from 'compression';
+import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -29,6 +30,8 @@ async function bootstrap() {
       },
     }),
   );
+
+  app.use(cookieParser());
 
   // Get configuration service
   const configService = app.get(ConfigService);
@@ -85,9 +88,11 @@ async function bootstrap() {
   logger.log(`📡 CORS enabled for: ${corsOrigins.join(', ')}`);
   logger.log(`🏥 Health check: http://localhost:${port}/health`);
   logger.log(`🧪 Demo endpoints: http://localhost:${port}/demo`);
-  logger.log(`🔌 WebSocket endpoint: ws://localhost:${port}/socket.io/`);
   logger.log(
-    `📊 WebSocket events: subscribe-machine, realtime-update, spc-update, machine-alert`,
+    `📡 SSE endpoint: http://localhost:${port}/sse/stream?deviceId=<deviceId>`,
+  );
+  logger.log(
+    `📊 SSE events: realtime-update, spc-update, machine-alert, machine-status`,
   );
   logger.log(
     `📈 Historical data API: REST endpoints with pagination and streaming`,

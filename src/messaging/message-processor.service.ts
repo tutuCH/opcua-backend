@@ -7,7 +7,6 @@ import {
   RealtimeData,
   SPCData,
 } from '../influxdb/influxdb.service';
-import { MachineGateway } from '../websocket/machine.gateway';
 import { RedisService } from '../redis/redis.service';
 import { Machine } from '../machines/entities/machine.entity';
 
@@ -19,7 +18,6 @@ export class MessageProcessorService implements OnModuleInit {
   constructor(
     private readonly reliableQueue: ReliableQueueService,
     private readonly influxDbService: InfluxDBService,
-    private readonly machineGateway: MachineGateway,
     private readonly redisService: RedisService,
     @InjectRepository(Machine)
     private readonly machineRepository: Repository<Machine>,
@@ -140,7 +138,7 @@ export class MessageProcessorService implements OnModuleInit {
         lastUpdated: new Date().toISOString(),
       });
 
-      // WebSocket broadcasting will be handled by Redis pub/sub in MachineGateway
+      // Realtime streaming will be handled by Redis pub/sub in RealtimeStreamService
 
       // Publish processed event
       await this.redisService.publish('mqtt:realtime:processed', {
@@ -174,7 +172,7 @@ export class MessageProcessorService implements OnModuleInit {
       // Store in InfluxDB
       await this.influxDbService.writeSPCData(data);
 
-      // WebSocket broadcasting will be handled by Redis pub/sub in MachineGateway
+      // Realtime streaming will be handled by Redis pub/sub in RealtimeStreamService
 
       // Publish processed event
       await this.redisService.publish('mqtt:spc:processed', {
@@ -228,7 +226,7 @@ export class MessageProcessorService implements OnModuleInit {
     const { deviceId, alert } = job.data;
 
     try {
-      // Alert broadcasting will be handled by Redis pub/sub in MachineGateway
+      // Alert broadcasting will be handled by Redis pub/sub in RealtimeStreamService
 
       // Store in Redis for alert history
       await this.redisService.lpush(

@@ -100,6 +100,8 @@ export class MachinesController {
     @Param('id') id: string,
     @JwtUserId() userId: number,
     @Query('timeRange') timeRange?: string,
+    @Query('start') start?: string,
+    @Query('end') end?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
     @Query('aggregate') aggregate?: string,
@@ -113,13 +115,17 @@ export class MachinesController {
         throw new HttpException('Machine not found', HttpStatus.NOT_FOUND);
       }
 
+      const { fluxStart, fluxStop, metadataRange } =
+        this.buildTimeRangeParams(timeRange, start, end);
+
       // Handle aggregation requests
       if (aggregate && aggregate !== 'none') {
         const windowSize = this.parseAggregateWindow(aggregate);
 
         const data = await this.influxDbService.queryRealtimeDataAggregated(
           machine.machineName,
-          timeRange || '-1h',
+          fluxStart,
+          fluxStop,
           windowSize,
         );
 
@@ -131,7 +137,7 @@ export class MachinesController {
           },
           metadata: {
             deviceId: machine.machineName,
-            timeRange: timeRange || '-1h',
+            timeRange: metadataRange,
           },
         };
       }
@@ -152,13 +158,15 @@ export class MachinesController {
       const [data, total] = await Promise.all([
         this.influxDbService.queryRealtimeDataPaginated(
           machine.machineName,
-          timeRange || '-1h',
+          fluxStart,
+          fluxStop,
           pageSize,
           pageOffset,
         ),
         this.influxDbService.getRealtimeDataCount(
           machine.machineName,
-          timeRange || '-1h',
+          fluxStart,
+          fluxStop,
         ),
       ]);
 
@@ -172,7 +180,7 @@ export class MachinesController {
         },
         metadata: {
           deviceId: machine.machineName,
-          timeRange: timeRange || '-1h',
+          timeRange: metadataRange,
           aggregate: aggregate || 'none',
         },
       };
@@ -202,11 +210,68 @@ export class MachinesController {
     return window;
   }
 
+  private buildTimeRangeParams(
+    timeRange?: string,
+    start?: string,
+    end?: string,
+  ): { fluxStart: string; fluxStop?: string; metadataRange: string } {
+    if ((start && !end) || (!start && end)) {
+      throw new HttpException(
+        'start and end parameters must be provided together',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (start && end) {
+      const startDate = new Date(start);
+      const endDate = new Date(end);
+
+      if (Number.isNaN(startDate.getTime())) {
+        throw new HttpException(
+          'start must be a valid ISO 8601 datetime',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (Number.isNaN(endDate.getTime())) {
+        throw new HttpException(
+          'end must be a valid ISO 8601 datetime',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (startDate.getTime() > endDate.getTime()) {
+        throw new HttpException(
+          'start must be before end',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const startIso = startDate.toISOString();
+      const endIso = endDate.toISOString();
+
+      return {
+        fluxStart: `time(v: \"${startIso}\")`,
+        fluxStop: `time(v: \"${endIso}\")`,
+        metadataRange: `${startIso}/${endIso}`,
+      };
+    }
+
+    const range = timeRange || '-1h';
+
+    return {
+      fluxStart: range,
+      metadataRange: range,
+    };
+  }
+
   @Get(':id/spc-history')
   async getSPCHistory(
     @Param('id') id: string,
     @JwtUserId() userId: number,
     @Query('timeRange') timeRange?: string,
+    @Query('start') start?: string,
+    @Query('end') end?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
     @Query('aggregate') aggregate?: string,
@@ -220,13 +285,17 @@ export class MachinesController {
         throw new HttpException('Machine not found', HttpStatus.NOT_FOUND);
       }
 
+      const { fluxStart, fluxStop, metadataRange } =
+        this.buildTimeRangeParams(timeRange, start, end);
+
       // Handle aggregation requests
       if (aggregate && aggregate !== 'none') {
         const windowSize = this.parseAggregateWindow(aggregate);
 
         const data = await this.influxDbService.querySPCDataAggregated(
           machine.machineName,
-          timeRange || '-1h',
+          fluxStart,
+          fluxStop,
           windowSize,
         );
 
@@ -238,7 +307,7 @@ export class MachinesController {
           },
           metadata: {
             deviceId: machine.machineName,
-            timeRange: timeRange || '-1h',
+            timeRange: metadataRange,
           },
         };
       }
@@ -259,13 +328,15 @@ export class MachinesController {
       const [data, total] = await Promise.all([
         this.influxDbService.querySPCDataPaginated(
           machine.machineName,
-          timeRange || '-1h',
+          fluxStart,
+          fluxStop,
           pageSize,
           pageOffset,
         ),
         this.influxDbService.getSPCDataCount(
           machine.machineName,
-          timeRange || '-1h',
+          fluxStart,
+          fluxStop,
         ),
       ]);
 
@@ -279,7 +350,7 @@ export class MachinesController {
         },
         metadata: {
           deviceId: machine.machineName,
-          timeRange: timeRange || '-1h',
+          timeRange: metadataRange,
           aggregate: aggregate || 'none',
         },
       };

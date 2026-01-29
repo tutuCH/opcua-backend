@@ -5,7 +5,7 @@ This guide describes how to fetch SPC chart data, keep charts updated in real ti
 ## Overview
 
 - Initial chart render uses `GET /api/spc/series`.
-- Live updates use WebSocket `spc-series-update` events.
+- Live updates use SSE `spc-update` events.
 - Long windows (24h/3d/7d) should refresh the downsampled series every 5-10 minutes.
 
 ## REST: GET /api/spc/series
@@ -108,57 +108,35 @@ Notes:
 - If no data is found: `series: []`, `stats: null`, `limits: null`
 - Invalid field names return HTTP 400 with list of allowed fields
 
-## WebSocket: spc-series-update
+## SSE: spc-update
 
-Emits bucketed chart points plus updated stats/limits. Use this to keep charts and overlays fresh without re-calling the series API for each point.
+Emits raw SPC cycle updates. Use this to update charts in near-real-time, and periodically refresh the downsampled series via `GET /api/spc/series`.
 
 Payload example:
 
 ```json
 {
-  "deviceId": "postgres machine 1",
-  "field": "cycle_time",
-  "window": {
-    "mode": "last_1h",
-    "start": "2026-01-20T20:05:19.360Z",
-    "end": "2026-01-20T21:05:19.360Z"
+  "deviceId": "Machine 1",
+  "data": {
+    "devId": "Machine 1",
+    "topic": "spc",
+    "timestamp": 1736935200000,
+    "Data": {
+      "CYCN": "6026",
+      "ECYCT": "45.2",
+      "EIVM": "152.3",
+      "EIPM": "78.5",
+      "ET1": "221.5"
+    }
   },
-  "sampling": {
-    "limit": 100,
-    "intervalMs": 36000,
-    "downsample": "avg"
-  },
-  "point": {
-    "kind": "bucketed",
-    "ts": "2026-01-20T21:00:22.339Z",
-    "value": 27.18
-  },
-  "stats": {
-    "count": 68,
-    "mean": 32.55,
-    "stdDev": 3.79,
-    "min": 25.65,
-    "max": 45.62,
-    "median": 32.11,
-    "p95": 37.24
-  },
-  "limits": {
-    "mean": 32.55,
-    "sigma": 3.79,
-    "ucl": 43.92,
-    "lcl": 21.17,
-    "method": "xbar-3sigma"
-  },
-  "timestamp": "2026-01-20T21:05:19.408Z"
+  "timestamp": "2025-01-15T10:00:00.000Z"
 }
 ```
 
 Notes:
 
-- `deviceId` is the machine name (e.g., `"postgres machine 1"`), not the numeric ID
-- Emit interval differs by window: `intervalMs = (windowEnd - windowStart) / limit`
-- The backend aggregates raw points into buckets; it emits only when a bucket closes or a debounce threshold is hit
-- Frontend should append the bucketed point and update overlays using `stats`/`limits`
+- `deviceId` is the machine name (e.g., `"Machine 1"`), not the numeric ID.
+- Use the REST series endpoint for long-window charts and downsampling.
 
 ## Suggested Frontend Flow
 

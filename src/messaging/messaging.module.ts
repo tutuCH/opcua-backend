@@ -4,16 +4,10 @@ import { ReliableQueueService } from './reliable-queue.service';
 import { MessageProcessorService } from './message-processor.service';
 import { RedisModule } from '../redis/redis.module';
 import { InfluxDBModule } from '../influxdb/influxdb.module';
-import { WebSocketModule } from '../websocket/websocket.module';
 import { Machine } from '../machines/entities/machine.entity';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Machine]),
-    RedisModule,
-    InfluxDBModule,
-    WebSocketModule,
-  ],
+  imports: [TypeOrmModule.forFeature([Machine]), RedisModule, InfluxDBModule],
   providers: [ReliableQueueService, MessageProcessorService],
   exports: [ReliableQueueService, MessageProcessorService],
 })

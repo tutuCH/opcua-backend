@@ -57,7 +57,7 @@ Scope: serve the frontend at `dashboard.harrytu.cv` via Vercel and the backend a
 3. Capture outputs (`outputs.json` or `backend.env`) — note Elastic IP.
 4. Set Cloudflare DNS: A record `api-dashboard` → Elastic IP (proxy on for TLS, or off if you terminate TLS on EC2).
 5. Update backend env: set `FRONTEND_URL=https://dashboard.harrytu.cv`, `APP_ENV=production`, etc. For Compose deployments, edit `.env.compose` before redeploy.
-6. Verify: `curl https://api-dashboard.harrytu.cv/health` (if proxied) or `http://...` if DNS-only; check websockets reach via `wss://api-dashboard.harrytu.cv/socket.io/` when proxied.
+6. Verify: `curl https://api-dashboard.harrytu.cv/health` (if proxied) or `http://...` if DNS-only; check SSE stream reach via `https://api-dashboard.harrytu.cv/sse/stream` when proxied.
 
 **CLI path (one-shot demo)**
 
@@ -89,4 +89,4 @@ Scope: serve the frontend at `dashboard.harrytu.cv` via Vercel and the backend a
 - [ ] Confirm Vercel project builds and domain added (`dashboard.harrytu.cv`).
 - [ ] Run `./infrastructure/deploy.sh`, capture Elastic IP, and wire `api-dashboard.harrytu.cv`.
 - [ ] Update `.env.compose`/CORS with the new domains and redeploy backend.
-- [ ] Validate HTTPS + WebSocket paths from the frontend against the new subdomains.
+- [ ] Validate HTTPS + SSE stream paths from the frontend against the new subdomains.

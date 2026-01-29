@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as mqtt from 'mqtt';
@@ -9,7 +9,6 @@ import {
   SPCData,
   WarningData,
 } from '../influxdb/influxdb.service';
-import { MachineGateway } from '../websocket/machine.gateway';
 import { Machine } from '../machines/entities/machine.entity';
 
 export interface TechData {
@@ -23,15 +22,15 @@ export interface TechData {
 }
 
 @Injectable()
-export class MqttProcessorService implements OnModuleInit {
+export class MqttProcessorService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MqttProcessorService.name);
   private mqttClient: mqtt.MqttClient;
   private isProcessing = false;
+  private cleanupInterval?: NodeJS.Timeout;
 
   constructor(
     private readonly redisService: RedisService,
     private readonly influxDbService: InfluxDBService,
-    private readonly machineGateway: MachineGateway,
     @InjectRepository(Machine)
     private readonly machineRepository: Repository<Machine>,
   ) {}
@@ -42,6 +41,22 @@ export class MqttProcessorService implements OnModuleInit {
 
     await this.connectToMQTT();
     this.startMessageProcessor();
+
+    // Periodically clean old backlog so fresh data can be processed promptly
+    this.cleanupInterval = setInterval(() => {
+      this.redisService.cleanupOldMessages().catch((error) => {
+        this.logger.warn(
+          `Failed to cleanup old Redis messages: ${error?.message || error}`,
+        );
+      });
+    }, 60000);
+  }
+
+  onModuleDestroy() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
   }
 
   private async connectToMQTT() {
@@ -377,7 +392,7 @@ export class MqttProcessorService implements OnModuleInit {
         lastUpdated: new Date().toISOString(),
       });
 
-      // WebSocket broadcasting will be handled by Redis pub/sub in MachineGateway
+      // Realtime streaming will be handled by Redis pub/sub in RealtimeStreamService
       this.logger.log(
         `📡 Realtime update for device ${data.devId} will be broadcasted via Redis pub/sub`,
       );
@@ -437,7 +452,7 @@ export class MqttProcessorService implements OnModuleInit {
       );
       await this.influxDbService.writeSPCData(data);
 
-      // WebSocket broadcasting will be handled by Redis pub/sub in MachineGateway
+      // Realtime streaming will be handled by Redis pub/sub in RealtimeStreamService
       this.logger.log(
         `📡 SPC update for device ${data.devId} will be broadcasted via Redis pub/sub`,
       );
@@ -568,7 +583,7 @@ export class MqttProcessorService implements OnModuleInit {
         });
       }
 
-      // Publish alerts to Redis for processing via MachineGateway
+      // Publish alerts to Redis for processing via RealtimeStreamService
       for (const alert of alerts) {
         await this.redisService.publish('machine:alerts', {
           deviceId: data.devId,

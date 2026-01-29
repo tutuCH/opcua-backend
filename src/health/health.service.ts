@@ -4,7 +4,7 @@ import { DataSource } from 'typeorm';
 import { RedisService } from '../redis/redis.service';
 import { InfluxDBService } from '../influxdb/influxdb.service';
 import { MqttProcessorService } from '../mqtt-processor/mqtt-processor.service';
-import { MachineGateway } from '../websocket/machine.gateway';
+import { RealtimeStreamService } from '../realtime-stream/realtime-stream.service';
 import { MockDataService } from '../mock-data/mock-data.service';
 
 export interface HealthStatus {
@@ -38,7 +38,7 @@ export class HealthService {
     private readonly redisService: RedisService,
     private readonly influxDbService: InfluxDBService,
     private readonly mqttProcessorService: MqttProcessorService,
-    private readonly machineGateway: MachineGateway,
+    private readonly realtimeStreamService: RealtimeStreamService,
     private readonly mockDataService: MockDataService,
   ) {}
 
@@ -200,8 +200,10 @@ export class HealthService {
     const startTime = Date.now();
 
     try {
-      const connectedClients = this.machineGateway.getConnectedClientsCount();
-      const subscriptions = this.machineGateway.getMachineSubscriptions();
+      const connectedClients =
+        this.realtimeStreamService.getConnectedClientsCount();
+      const subscriptions =
+        this.realtimeStreamService.getMachineSubscriptions();
 
       return {
         status: 'ok',
@@ -214,7 +216,7 @@ export class HealthService {
         },
       };
     } catch (error) {
-      this.logger.error('WebSocket health check failed:', error);
+      this.logger.error('Realtime stream health check failed:', error);
       return {
         status: 'error',
         timestamp: new Date().toISOString(),

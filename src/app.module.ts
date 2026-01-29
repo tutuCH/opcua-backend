@@ -18,7 +18,7 @@ import { JwtAuthGuard } from './auth/strategies/auth.guard';
 import { UserOwnershipGuard } from './auth/strategies/user.ownership.guard';
 import { InfluxDBModule } from './influxdb/influxdb.module';
 import { RedisModule } from './redis/redis.module';
-import { WebSocketModule } from './websocket/websocket.module';
+import { RealtimeStreamModule } from './realtime-stream/realtime-stream.module';
 import { MqttProcessorModule } from './mqtt-processor/mqtt-processor.module';
 import { MockDataModule } from './mock-data/mock-data.module';
 import { AppConfigModule } from './config/config.module';
@@ -26,6 +26,7 @@ import { HealthModule } from './health/health.module';
 import { DemoModule } from './demo/demo.module';
 import { DebugModule } from './debug/debug.module';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { SPCSeriesModule } from './spc-series/spc-series.module';
 @Module({
   imports: [
     // Configuration Module (global)
@@ -99,7 +100,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
     // Demo MQTT Server Integration Modules
     InfluxDBModule,
     RedisModule,
-    WebSocketModule,
+    RealtimeStreamModule,
     MqttProcessorModule,
     MockDataModule,
 

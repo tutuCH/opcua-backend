@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { RedisService } from '../redis/redis.service';
 import { InfluxDBService } from '../influxdb/influxdb.service';
 import { MqttProcessorService } from '../mqtt-processor/mqtt-processor.service';
-import { MachineGateway } from '../websocket/machine.gateway';
+import { RealtimeStreamService } from '../realtime-stream/realtime-stream.service';
 import { MockDataService } from '../mock-data/mock-data.service';
 import { Machine } from '../machines/entities/machine.entity';
 import { HealthService } from '../health/health.service';
@@ -19,7 +19,7 @@ export class DemoService {
     private readonly redisService: RedisService,
     private readonly influxDbService: InfluxDBService,
     private readonly mqttProcessorService: MqttProcessorService,
-    private readonly machineGateway: MachineGateway,
+    private readonly realtimeStreamService: RealtimeStreamService,
     private readonly mockDataService: MockDataService,
     private readonly healthService: HealthService,
   ) {}
@@ -195,8 +195,10 @@ export class DemoService {
 
   async getWebSocketStatus() {
     try {
-      const connectedClients = this.machineGateway.getConnectedClientsCount();
-      const subscriptions = this.machineGateway.getMachineSubscriptions();
+      const connectedClients =
+        this.realtimeStreamService.getConnectedClientsCount();
+      const subscriptions =
+        this.realtimeStreamService.getMachineSubscriptions();
 
       return {
         status: 'active',
@@ -204,7 +206,7 @@ export class DemoService {
         subscriptions,
         totalSubscriptions: Object.keys(subscriptions).length,
         activeRooms: Object.keys(subscriptions).map(
-          (deviceId) => `machine-${deviceId}`,
+          (deviceId) => `stream-${deviceId}`,
         ),
         timestamp: new Date().toISOString(),
       };

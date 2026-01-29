@@ -5,7 +5,7 @@ import { DemoService } from './demo.service';
 import { RedisModule } from '../redis/redis.module';
 import { InfluxDBModule } from '../influxdb/influxdb.module';
 import { MqttProcessorModule } from '../mqtt-processor/mqtt-processor.module';
-import { WebSocketModule } from '../websocket/websocket.module';
+import { RealtimeStreamModule } from '../realtime-stream/realtime-stream.module';
 import { MockDataModule } from '../mock-data/mock-data.module';
 import { HealthModule } from '../health/health.module';
 import { Machine } from '../machines/entities/machine.entity';
@@ -16,7 +16,7 @@ import { Machine } from '../machines/entities/machine.entity';
     RedisModule,
     InfluxDBModule,
     MqttProcessorModule,
-    WebSocketModule,
+    RealtimeStreamModule,
     MockDataModule,
     HealthModule,
   ],

@@ -5,14 +5,15 @@
 - **Frontend**: `https://dashboard.harrytu.cv`
 - **Backend API base**: `https://api-dashboard.harrytu.cv`
 - **Health check**: `https://api-dashboard.harrytu.cv/health`
-- **WebSocket (Socket.IO)**: `wss://api-dashboard.harrytu.cv/socket.io/`
+- **SSE stream**: `https://api-dashboard.harrytu.cv/sse/stream`
 
 ## Frontend Environment Variables
 
 Use your frontend framework’s public env convention. The key names below are examples; align them with the frontend repo:
 
 - `NEXT_PUBLIC_API_BASE_URL=https://api-dashboard.harrytu.cv`
-- `NEXT_PUBLIC_WS_URL=wss://api-dashboard.harrytu.cv/socket.io/`
+- `NEXT_PUBLIC_WS_URL=https://api-dashboard.harrytu.cv/sse/stream`
+  (kept name for minimal frontend changes; it now points to SSE)
 
 If the frontend uses Vite or another bundler, map to its public prefix (e.g., `VITE_API_BASE_URL`).
 
@@ -25,7 +26,8 @@ Ensure backend env/config allows the production frontend origin:
 
 ## Authentication Notes
 
-- Auth tokens (JWTs) are issued by the backend. The frontend should store tokens securely (HTTP-only cookies recommended if supported).
+- Auth tokens (JWTs) are issued by the backend and set as HTTP-only cookies. Use `credentials: 'include'` on frontend requests.
+- Authorization headers are still supported for non-browser clients.
 - Backend secrets such as `JWT_SECRET`, database credentials, and Cloudflare origin private keys **must never** be included in the frontend.
 
 ## Cloudflare + TLS
@@ -43,4 +45,4 @@ Ensure backend env/config allows the production frontend origin:
 
 - `curl https://api-dashboard.harrytu.cv/health` returns `200`.
 - Frontend loads data from `https://api-dashboard.harrytu.cv`.
-- WebSocket connects to `wss://api-dashboard.harrytu.cv/socket.io/`.
+- SSE stream connects to `https://api-dashboard.harrytu.cv/sse/stream`.

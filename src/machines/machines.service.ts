@@ -167,6 +167,26 @@ export class MachinesService {
     return machine;
   }
 
+  async findOneByNameForUser(
+    machineName: string,
+    userId: number,
+  ): Promise<Machine> {
+    const machine = await this.machineRepository.findOne({
+      where: { machineName },
+      relations: ['user', 'factory'],
+    });
+
+    if (!machine) {
+      throw new NotFoundException(`Machine ${machineName} not found`);
+    }
+
+    if (machine.user.userId !== userId) {
+      throw new UnauthorizedException('You do not have access to this machine');
+    }
+
+    return machine;
+  }
+
   async update(
     id: number,
     updateMachineDto: UpdateMachineDto,

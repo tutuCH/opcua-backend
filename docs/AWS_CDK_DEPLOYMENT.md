@@ -9,6 +9,7 @@ Deploy your IoT backend to AWS with one command:
 ```
 
 This will:
+
 - ✅ Create VPC, Security Group, EC2 instance
 - ✅ Allocate and attach Elastic IP (static IP)
 - ✅ Install Docker and start all services
@@ -147,36 +148,38 @@ export class OpcuaBackendStack extends cdk.Stack {
     securityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(80),
-      'Allow HTTP'
+      'Allow HTTP',
     );
     securityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(443),
-      'Allow HTTPS'
+      'Allow HTTPS',
     );
     securityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(3000),
-      'Allow Backend API'
+      'Allow Backend API',
     );
     securityGroup.addIngressRule(
       ec2.Peer.anyIpv4(),
       ec2.Port.tcp(1883),
-      'Allow MQTT'
+      'Allow MQTT',
     );
 
     // Restrict SSH to your IP (update this!)
     securityGroup.addIngressRule(
       ec2.Peer.ipv4('0.0.0.0/0'), // TODO: Replace with your IP
       ec2.Port.tcp(22),
-      'Allow SSH'
+      'Allow SSH',
     );
 
     // 3. IAM Role for EC2 (optional, for CloudWatch logs)
     const role = new iam.Role(this, 'OpcuaInstanceRole', {
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
       managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchAgentServerPolicy'),
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          'CloudWatchAgentServerPolicy',
+        ),
       ],
     });
 
@@ -255,7 +258,7 @@ export class OpcuaBackendStack extends cdk.Stack {
       'systemctl daemon-reload',
       'systemctl enable opcua-backend',
       '',
-      'echo "=== OPCUA Backend Setup Complete ==="'
+      'echo "=== OPCUA Backend Setup Complete ==="',
     );
 
     // 5. EC2 Instance
@@ -263,7 +266,7 @@ export class OpcuaBackendStack extends cdk.Stack {
       vpc,
       instanceType: ec2.InstanceType.of(
         ec2.InstanceClass.T3,
-        ec2.InstanceSize.MEDIUM
+        ec2.InstanceSize.MEDIUM,
       ),
       machineImage: ec2.MachineImage.latestAmazonLinux2023({
         cpuType: ec2.AmazonLinuxCpuType.X86_64,
@@ -322,8 +325,8 @@ export class OpcuaBackendStack extends cdk.Stack {
     });
 
     new cdk.CfnOutput(this, 'WebSocketURL', {
-      value: `ws://${eip.ref}:3000/socket.io/`,
-      description: 'WebSocket URL',
+      value: `http://${eip.ref}:3000/sse/stream`,
+      description: 'SSE stream URL (kept name for compatibility)',
     });
   }
 }
@@ -337,9 +340,7 @@ export class OpcuaBackendStack extends cdk.Stack {
 {
   "app": "npx ts-node bin/opcua-backend.ts",
   "watch": {
-    "include": [
-      "**"
-    ],
+    "include": ["**"],
     "exclude": [
       "README.md",
       "cdk*.json",
@@ -354,10 +355,7 @@ export class OpcuaBackendStack extends cdk.Stack {
   "context": {
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
     "@aws-cdk/core:checkSecretUsage": true,
-    "@aws-cdk/core:target-partitions": [
-      "aws",
-      "aws-cn"
-    ],
+    "@aws-cdk/core:target-partitions": ["aws", "aws-cn"],
     "@aws-cdk-containers/ecs-service-extensions:enableDefaultLogDriver": true,
     "@aws-cdk/aws-ec2:uniqueImdsv2TemplateName": true,
     "@aws-cdk/aws-ecs:arnFormatIncludesClusterName": true,
@@ -415,9 +413,7 @@ export class OpcuaBackendStack extends cdk.Stack {
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": [
-      "es2020"
-    ],
+    "lib": ["es2020"],
     "declaration": true,
     "strict": true,
     "noImplicitAny": true,
@@ -432,14 +428,9 @@ export class OpcuaBackendStack extends cdk.Stack {
     "inlineSources": true,
     "experimentalDecorators": true,
     "strictPropertyInitialization": false,
-    "typeRoots": [
-      "./node_modules/@types"
-    ]
+    "typeRoots": ["./node_modules/@types"]
   },
-  "exclude": [
-    "node_modules",
-    "cdk.out"
-  ]
+  "exclude": ["node_modules", "cdk.out"]
 }
 ```
 
@@ -525,7 +516,7 @@ if [ -f outputs.json ]; then
   echo "🖥️  Instance ID:    $INSTANCE_ID"
   echo "🌐 Backend URL:    http://$ELASTIC_IP:3000"
   echo "📡 MQTT Broker:    mqtt://$ELASTIC_IP:1883"
-  echo "🔌 WebSocket URL:  ws://$ELASTIC_IP:3000/socket.io/"
+  echo "📡 SSE Stream URL:  http://$ELASTIC_IP:3000/sse/stream"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo ""
 
@@ -535,7 +526,7 @@ ELASTIC_IP=$ELASTIC_IP
 INSTANCE_ID=$INSTANCE_ID
 BACKEND_URL=http://$ELASTIC_IP:3000
 MQTT_BROKER=mqtt://$ELASTIC_IP:1883
-WEBSOCKET_URL=ws://$ELASTIC_IP:3000/socket.io/
+WEBSOCKET_URL=http://$ELASTIC_IP:3000/sse/stream
 EOF
 
   echo "📝 Connection details saved to backend.env"
@@ -583,6 +574,7 @@ fi
 ```
 
 Make it executable:
+
 ```bash
 chmod +x infrastructure/deploy.sh
 ```
@@ -628,7 +620,9 @@ async function testEndpoint(path, expectedStatus = 200, method = 'GET') {
           console.log(`✅ ${method} ${path} - Status ${res.statusCode} (OK)`);
           resolve({ status: res.statusCode, data });
         } else {
-          console.error(`❌ ${method} ${path} - Expected ${expectedStatus}, got ${res.statusCode}`);
+          console.error(
+            `❌ ${method} ${path} - Expected ${expectedStatus}, got ${res.statusCode}`,
+          );
           reject(new Error(`Unexpected status code: ${res.statusCode}`));
         }
       });
@@ -686,6 +680,7 @@ async function testEndpoint(path, expectedStatus = 200, method = 'GET') {
 **File**: `docker-compose.yml`
 
 Change line 71:
+
 ```yaml
 # FROM:
 DOCKER_INFLUXDB_INIT_RETENTION: 1h
@@ -699,6 +694,7 @@ DOCKER_INFLUXDB_INIT_RETENTION: 720h  # 30 days
 **File**: `infrastructure/lib/opcua-backend-stack.ts`
 
 Update line with repository clone:
+
 ```typescript
 'git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git opcua-backend || echo "Update repo URL"',
 ```
@@ -717,6 +713,7 @@ cd infrastructure
 ```
 
 Expected output:
+
 ```
 🚀 Deploying OPCUA Backend to AWS...
 📦 Installing CDK dependencies...
@@ -734,7 +731,7 @@ Expected output:
 🖥️  Instance ID:    i-0123456789abcdef0
 🌐 Backend URL:    http://52.12.34.56:3000
 📡 MQTT Broker:    mqtt://52.12.34.56:1883
-🔌 WebSocket URL:  ws://52.12.34.56:3000/socket.io/
+📡 SSE Stream URL:  http://52.12.34.56:3000/sse/stream
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📝 Connection details saved to backend.env
@@ -818,6 +815,7 @@ new route53.ARecord(this, 'OpcuaARecord', {
 ```
 
 Then deploy:
+
 ```bash
 cdk deploy
 ```
@@ -1020,6 +1018,7 @@ You've successfully deployed your IoT backend to AWS with:
 - ✅ **Cost-Effective**: $35-45/month for 50-100 machines
 
 **Next Steps**:
+
 1. Connect production machines to `mqtt://<elastic-ip>:1883`
 2. Configure frontend to use `http://<elastic-ip>:3000`
 3. Set up DNS with Route53 (optional)

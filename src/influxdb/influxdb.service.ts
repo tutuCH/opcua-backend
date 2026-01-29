@@ -109,6 +109,14 @@ export class InfluxDBService implements OnModuleInit {
     }
   }
 
+  private buildRangeClause(start: string, stop?: string): string {
+    if (stop) {
+      return `|> range(start: ${start}, stop: ${stop})`;
+    }
+
+    return `|> range(start: ${start})`;
+  }
+
   async writeRealtimeData(data: RealtimeData): Promise<void> {
     try {
       // Check if data timestamp is within retention policy window (1 hour)
@@ -271,18 +279,34 @@ export class InfluxDBService implements OnModuleInit {
   async queryRealtimeDataPaginated(
     deviceId: string,
     timeRange: string = '-1h',
-    limit: number = 1000,
-    offset: number = 0,
+    stopOrLimit: string | number = 1000,
+    limitOrOffset: number = 0,
+    offset?: number,
   ): Promise<any[]> {
     try {
+      let stop: string | undefined;
+      let limit: number;
+      let resolvedOffset: number;
+
+      if (typeof stopOrLimit === 'string') {
+        stop = stopOrLimit;
+        limit = limitOrOffset || 1000;
+        resolvedOffset = offset || 0;
+      } else {
+        stop = undefined;
+        limit = stopOrLimit || 1000;
+        resolvedOffset = limitOrOffset || 0;
+      }
+
+      const rangeClause = this.buildRangeClause(timeRange, stop);
       const query = `
         from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
-          |> range(start: ${timeRange})
+          ${rangeClause}
           |> filter(fn: (r) => r["_measurement"] == "realtime")
           |> filter(fn: (r) => r["device_id"] == "${deviceId}")
           |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
           |> sort(columns: ["_time"], desc: true)
-          |> limit(n: ${limit}, offset: ${offset})
+          |> limit(n: ${limit}, offset: ${resolvedOffset})
       `;
 
       const result = [];
@@ -301,7 +325,7 @@ export class InfluxDBService implements OnModuleInit {
           },
           complete: () => {
             this.logger.debug(
-              `Paginated query completed for device ${deviceId}, ${result.length} records (limit: ${limit}, offset: ${offset})`,
+              `Paginated query completed for device ${deviceId}, ${result.length} records (limit: ${limit}, offset: ${resolvedOffset})`,
             );
             resolve(result);
           },
@@ -319,18 +343,34 @@ export class InfluxDBService implements OnModuleInit {
   async querySPCDataPaginated(
     deviceId: string,
     timeRange: string = '-1h',
-    limit: number = 1000,
-    offset: number = 0,
+    stopOrLimit: string | number = 1000,
+    limitOrOffset: number = 0,
+    offset?: number,
   ): Promise<any[]> {
     try {
+      let stop: string | undefined;
+      let limit: number;
+      let resolvedOffset: number;
+
+      if (typeof stopOrLimit === 'string') {
+        stop = stopOrLimit;
+        limit = limitOrOffset || 1000;
+        resolvedOffset = offset || 0;
+      } else {
+        stop = undefined;
+        limit = stopOrLimit || 1000;
+        resolvedOffset = limitOrOffset || 0;
+      }
+
+      const rangeClause = this.buildRangeClause(timeRange, stop);
       const query = `
         from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
-          |> range(start: ${timeRange})
+          ${rangeClause}
           |> filter(fn: (r) => r["_measurement"] == "spc")
           |> filter(fn: (r) => r["device_id"] == "${deviceId}")
           |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
           |> sort(columns: ["_time"], desc: true)
-          |> limit(n: ${limit}, offset: ${offset})
+          |> limit(n: ${limit}, offset: ${resolvedOffset})
       `;
 
       const result = [];
@@ -349,7 +389,7 @@ export class InfluxDBService implements OnModuleInit {
           },
           complete: () => {
             this.logger.debug(
-              `Paginated SPC query completed for device ${deviceId}, ${result.length} records (limit: ${limit}, offset: ${offset})`,
+              `Paginated SPC query completed for device ${deviceId}, ${result.length} records (limit: ${limit}, offset: ${resolvedOffset})`,
             );
             resolve(result);
           },
@@ -369,12 +409,21 @@ export class InfluxDBService implements OnModuleInit {
   async queryRealtimeDataAggregated(
     deviceId: string,
     timeRange: string = '-1h',
-    aggregation: string = '1m',
+    stopOrAggregation: string | undefined = '1m',
+    aggregationMaybe?: string,
   ): Promise<any[]> {
     try {
+      const stop =
+        aggregationMaybe && typeof stopOrAggregation === 'string'
+          ? stopOrAggregation
+          : undefined;
+      const aggregation = aggregationMaybe
+        ? aggregationMaybe
+        : stopOrAggregation || '1m';
+      const rangeClause = this.buildRangeClause(timeRange, stop);
       const query = `
         from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
-          |> range(start: ${timeRange})
+          ${rangeClause}
           |> filter(fn: (r) => r["_measurement"] == "realtime")
           |> filter(fn: (r) => r["device_id"] == "${deviceId}")
           |> aggregateWindow(every: ${aggregation}, fn: mean, createEmpty: false)
@@ -416,12 +465,21 @@ export class InfluxDBService implements OnModuleInit {
   async querySPCDataAggregated(
     deviceId: string,
     timeRange: string = '-1h',
-    aggregation: string = '1m',
+    stopOrAggregation: string | undefined = '1m',
+    aggregationMaybe?: string,
   ): Promise<any[]> {
     try {
+      const stop =
+        aggregationMaybe && typeof stopOrAggregation === 'string'
+          ? stopOrAggregation
+          : undefined;
+      const aggregation = aggregationMaybe
+        ? aggregationMaybe
+        : stopOrAggregation || '1m';
+      const rangeClause = this.buildRangeClause(timeRange, stop);
       const query = `
         from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
-          |> range(start: ${timeRange})
+          ${rangeClause}
           |> filter(fn: (r) => r["_measurement"] == "spc")
           |> filter(fn: (r) => r["device_id"] == "${deviceId}")
           |> aggregateWindow(every: ${aggregation}, fn: mean, createEmpty: false)
@@ -465,11 +523,13 @@ export class InfluxDBService implements OnModuleInit {
   async getRealtimeDataCount(
     deviceId: string,
     timeRange: string = '-1h',
+    stop?: string,
   ): Promise<number> {
     try {
+      const rangeClause = this.buildRangeClause(timeRange, stop);
       const query = `
         from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
-          |> range(start: ${timeRange})
+          ${rangeClause}
           |> filter(fn: (r) => r["_measurement"] == "realtime")
           |> filter(fn: (r) => r["device_id"] == "${deviceId}")
           |> count()
@@ -507,11 +567,13 @@ export class InfluxDBService implements OnModuleInit {
   async getSPCDataCount(
     deviceId: string,
     timeRange: string = '-1h',
+    stop?: string,
   ): Promise<number> {
     try {
+      const rangeClause = this.buildRangeClause(timeRange, stop);
       const query = `
         from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
-          |> range(start: ${timeRange})
+          ${rangeClause}
           |> filter(fn: (r) => r["_measurement"] == "spc")
           |> filter(fn: (r) => r["device_id"] == "${deviceId}")
           |> count()

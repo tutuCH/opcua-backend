@@ -4,7 +4,7 @@ import { HealthService } from './health.service';
 import { RedisModule } from '../redis/redis.module';
 import { InfluxDBModule } from '../influxdb/influxdb.module';
 import { MqttProcessorModule } from '../mqtt-processor/mqtt-processor.module';
-import { WebSocketModule } from '../websocket/websocket.module';
+import { RealtimeStreamModule } from '../realtime-stream/realtime-stream.module';
 import { MockDataModule } from '../mock-data/mock-data.module';
 
 @Module({
@@ -12,7 +12,7 @@ import { MockDataModule } from '../mock-data/mock-data.module';
     RedisModule,
     InfluxDBModule,
     MqttProcessorModule,
-    WebSocketModule,
+    RealtimeStreamModule,
     MockDataModule,
   ],
   controllers: [HealthController],

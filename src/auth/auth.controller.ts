@@ -9,7 +9,10 @@ import {
   Put,
   Query,
   Request,
+  Res,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Response } from 'express';
 import { AuthService } from './auth.service';
 import { GoogleAuthService } from './google-auth.service';
 import { Public } from './decorators/public.decorator';
@@ -25,14 +28,23 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private googleAuthService: GoogleAuthService,
+    private configService: ConfigService,
   ) {}
 
   // Public route for user login
   @Public()
   @HttpCode(HttpStatus.OK)
   @Post('login')
-  async signIn(@Body() signInDto: SignInDto) {
-    return this.authService.signIn(signInDto.email, signInDto.password);
+  async signIn(
+    @Body() signInDto: SignInDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.signIn(
+      signInDto.email,
+      signInDto.password,
+    );
+    this.setAuthCookie(res, result.access_token);
+    return result;
   }
 
   @Public()
@@ -44,8 +56,15 @@ export class AuthController {
 
   @Public()
   @Get('verify-email')
-  async verifyEmail(@Query('token') token: string) {
-    return this.authService.verifyEmail(token);
+  async verifyEmail(
+    @Query('token') token: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.verifyEmail(token);
+    if (result.access_token) {
+      this.setAuthCookie(res, result.access_token);
+    }
+    return result;
   }
 
   // Protected route for getting user profile
@@ -78,8 +97,15 @@ export class AuthController {
 
   @Public()
   @Post('google')
-  async googleSignIn(@Body() googleAuthDto: GoogleAuthDto) {
-    return this.googleAuthService.authenticateWithGoogle(googleAuthDto.idToken);
+  async googleSignIn(
+    @Body() googleAuthDto: GoogleAuthDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.googleAuthService.authenticateWithGoogle(
+      googleAuthDto.idToken,
+    );
+    this.setAuthCookie(res, result.access_token);
+    return result;
   }
 
   @Public()
@@ -92,5 +118,19 @@ export class AuthController {
   @Post('reset-password')
   async resetPassword(@Body() body: { token: string; password: string }) {
     return this.authService.resetPassword(body.token, body.password);
+  }
+
+  private setAuthCookie(res: Response, token: string) {
+    const environment = this.configService.get('app.environment');
+    const isProduction = environment === 'production';
+    const cookieMaxAgeMs = 7 * 24 * 60 * 60 * 1000;
+
+    res.cookie('access_token', token, {
+      httpOnly: true,
+      sameSite: isProduction ? 'none' : 'lax',
+      secure: isProduction,
+      maxAge: cookieMaxAgeMs,
+      path: '/',
+    });
   }
 }
