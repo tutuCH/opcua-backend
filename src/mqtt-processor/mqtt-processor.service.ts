@@ -52,13 +52,6 @@ export class MqttProcessorService implements OnModuleInit, OnModuleDestroy {
     }, 60000);
   }
 
-  onModuleDestroy() {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = undefined;
-    }
-  }
-
   private async connectToMQTT() {
     try {
       const brokerUrl = process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883';
@@ -639,6 +632,11 @@ export class MqttProcessorService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     this.isProcessing = false;
+
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
 
     if (this.mqttClient) {
       this.mqttClient.end();
