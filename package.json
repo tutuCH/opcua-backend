@@ -25,7 +25,8 @@
     "demo:logs": "cd demoMqttServer && docker compose logs -f",
     "demo:health": "cd demoMqttServer && docker compose ps",
     "demo:clean": "cd demoMqttServer && docker compose down -v --rmi all",
-    "demo:dev": "npm run demo:setup && npm run demo:start && npm run start:dev"
+    "demo:dev": "npm run demo:setup && npm run demo:start && npm run start:dev",
+    "deploy:sit": "bash ./scripts/sit/deploy.sh"
   },
   "dependencies": {
     "@aws-sdk/client-timestream-write": "^3.750.0",

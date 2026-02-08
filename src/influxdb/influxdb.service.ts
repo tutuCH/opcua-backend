@@ -84,6 +84,31 @@ export class InfluxDBService implements OnModuleInit {
   private influxDB: InfluxDB;
   private writeApi: WriteApi;
   private queryApi: QueryApi;
+  private readonly maxIngestAgeMs = this.resolveMaxIngestAgeMs();
+
+  private resolveMaxIngestAgeMs(): number {
+    const configuredMs = Number(process.env.INFLUX_MAX_INGEST_AGE_MS);
+    if (Number.isFinite(configuredMs) && configuredMs > 0) {
+      return Math.floor(configuredMs);
+    }
+
+    const retentionHours = Number(process.env.INFLUXDB_RETENTION_HOURS);
+    if (Number.isFinite(retentionHours) && retentionHours > 0) {
+      return Math.floor(retentionHours * 60 * 60 * 1000);
+    }
+
+    // Default to 30 days to align with the standard local compose retention.
+    return 30 * 24 * 60 * 60 * 1000;
+  }
+
+  private isOutsideIngestAgeWindow(dataTime: Date, now: Date): boolean {
+    return dataTime.getTime() < now.getTime() - this.maxIngestAgeMs;
+  }
+
+  private ingestAgeDescriptor(): string {
+    const hours = this.maxIngestAgeMs / (60 * 60 * 1000);
+    return `${hours.toFixed(hours >= 24 ? 0 : 1)}h`;
+  }
 
   async onModuleInit() {
     try {
@@ -119,14 +144,18 @@ export class InfluxDBService implements OnModuleInit {
 
   async writeRealtimeData(data: RealtimeData): Promise<void> {
     try {
-      // Check if data timestamp is within retention policy window (1 hour)
       const dataTime = new Date(data.timestamp);
       const now = new Date();
-      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000); // 1 hour ago
-
-      if (dataTime < oneHourAgo) {
+      if (!Number.isFinite(dataTime.getTime())) {
         this.logger.warn(
-          `Skipping realtime data for device ${data.devId}: timestamp ${dataTime.toISOString()} is older than retention policy (1 hour)`,
+          `Skipping realtime data for device ${data.devId}: invalid timestamp ${data.timestamp}`,
+        );
+        return;
+      }
+
+      if (this.isOutsideIngestAgeWindow(dataTime, now)) {
+        this.logger.warn(
+          `Skipping realtime data for device ${data.devId}: timestamp ${dataTime.toISOString()} is older than ingest max age (${this.ingestAgeDescriptor()})`,
         );
         return;
       }
@@ -160,14 +189,18 @@ export class InfluxDBService implements OnModuleInit {
 
   async writeSPCData(data: SPCData): Promise<void> {
     try {
-      // Check if data timestamp is within retention policy window (1 hour)
       const dataTime = new Date(data.timestamp);
       const now = new Date();
-      const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000); // 1 hour ago
-
-      if (dataTime < oneHourAgo) {
+      if (!Number.isFinite(dataTime.getTime())) {
         this.logger.warn(
-          `Skipping SPC data for device ${data.devId}: timestamp ${dataTime.toISOString()} is older than retention policy (1 hour)`,
+          `Skipping SPC data for device ${data.devId}: invalid timestamp ${data.timestamp}`,
+        );
+        return;
+      }
+
+      if (this.isOutsideIngestAgeWindow(dataTime, now)) {
+        this.logger.warn(
+          `Skipping SPC data for device ${data.devId}: timestamp ${dataTime.toISOString()} is older than ingest max age (${this.ingestAgeDescriptor()})`,
         );
         return;
       }
@@ -1015,17 +1048,50 @@ export class InfluxDBService implements OnModuleInit {
     end: string,
     limit: number,
     order: 'asc' | 'desc',
+    downsample: 'none' | 'avg' | 'minmax' = 'none',
+    intervalMs?: number,
   ): Promise<any[]> {
     const escapedDeviceId = deviceId.replace(/"/g, '"');
-    const query = `
+    const safeIntervalMs =
+      intervalMs && Number.isFinite(intervalMs)
+        ? Math.max(Math.floor(intervalMs), 1000)
+        : null;
+
+    let query = `
       from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
         |> range(start: ${start}, stop: ${end})
         |> filter(fn: (r) => r["_measurement"] == "spc")
         |> filter(fn: (r) => r["device_id"] == "${escapedDeviceId}")
         |> filter(fn: (r) => r["_field"] == "${field}")
+    `;
+
+    if (downsample === 'avg' && safeIntervalMs) {
+      query += `
+        |> aggregateWindow(every: ${safeIntervalMs}ms, fn: mean, createEmpty: false)
         |> sort(columns: ["_time"], desc: ${order === 'desc'})
         |> limit(n: ${limit})
-    `;
+      `;
+    } else if (downsample === 'minmax' && safeIntervalMs) {
+      query = `
+        base = from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+          |> range(start: ${start}, stop: ${end})
+          |> filter(fn: (r) => r["_measurement"] == "spc")
+          |> filter(fn: (r) => r["device_id"] == "${escapedDeviceId}")
+          |> filter(fn: (r) => r["_field"] == "${field}")
+        mins = base
+          |> aggregateWindow(every: ${safeIntervalMs}ms, fn: min, createEmpty: false)
+        maxes = base
+          |> aggregateWindow(every: ${safeIntervalMs}ms, fn: max, createEmpty: false)
+        union(tables: [mins, maxes])
+          |> sort(columns: ["_time"], desc: ${order === 'desc'})
+          |> limit(n: ${limit})
+      `;
+    } else {
+      query += `
+        |> sort(columns: ["_time"], desc: ${order === 'desc'})
+        |> limit(n: ${limit})
+      `;
+    }
 
     const result = [];
     return new Promise((resolve, reject) => {
@@ -1047,6 +1113,73 @@ export class InfluxDBService implements OnModuleInit {
           );
           resolve(result);
         },
+      });
+    });
+  }
+
+  async querySPCSeriesCoverageStats(
+    deviceId: string,
+    field: string,
+    start: string,
+    end: string,
+  ): Promise<{ count: number; firstTs: string | null; lastTs: string | null }> {
+    const escapedDeviceId = deviceId.replace(/"/g, '"');
+    const base = `
+      from(bucket: "${process.env.INFLUXDB_BUCKET || 'machine-data'}")
+        |> range(start: ${start}, stop: ${end})
+        |> filter(fn: (r) => r["_measurement"] == "spc")
+        |> filter(fn: (r) => r["device_id"] == "${escapedDeviceId}")
+        |> filter(fn: (r) => r["_field"] == "${field}")
+    `;
+
+    const countQuery = `
+      ${base}
+        |> count(column: "_value")
+        |> limit(n: 1)
+    `;
+    const firstQuery = `
+      ${base}
+        |> first(column: "_time")
+        |> keep(columns: ["_time"])
+        |> limit(n: 1)
+    `;
+    const lastQuery = `
+      ${base}
+        |> last(column: "_time")
+        |> keep(columns: ["_time"])
+        |> limit(n: 1)
+    `;
+
+    const [countRows, firstRows, lastRows] = await Promise.all([
+      this.queryFluxRows(countQuery),
+      this.queryFluxRows(firstQuery),
+      this.queryFluxRows(lastQuery),
+    ]);
+
+    const countRaw = countRows[0]?._value;
+    const count = Number.isFinite(Number(countRaw)) ? Number(countRaw) : 0;
+    const firstTs = this.normalizeTimeRecord(firstRows[0]?._time);
+    const lastTs = this.normalizeTimeRecord(lastRows[0]?._time);
+
+    return { count, firstTs, lastTs };
+  }
+
+  private normalizeTimeRecord(value: unknown): string | null {
+    if (!value) return null;
+    const parsed = Date.parse(String(value));
+    if (!Number.isFinite(parsed)) return null;
+    return new Date(parsed).toISOString();
+  }
+
+  private queryFluxRows(query: string): Promise<any[]> {
+    const result: any[] = [];
+    return new Promise((resolve, reject) => {
+      this.queryApi.queryRows(query, {
+        next: (row, tableMeta) => {
+          result.push(tableMeta.toObject(row));
+        },
+        error: (error) => reject(error),
+        complete: () => resolve(result),
       });
     });
   }

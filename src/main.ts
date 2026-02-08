@@ -48,6 +48,7 @@ async function bootstrap() {
     'http://localhost:4173',
     'http://localhost:3000', // For WebSocket testing
     'https://opcua-frontend.vercel.app',
+    'http://192.168.18.3:5173',
     'https://dashboard.harrytu.cv', // Production frontend
   ];
 

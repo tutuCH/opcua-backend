@@ -46,6 +46,17 @@ export interface SPCSeriesLimits {
   method: string;
 }
 
+export interface SPCSeriesCoverage {
+  firstTs: string | null;
+  lastTs: string | null;
+  requestedSpanMs: number;
+  observedSpanMs: number;
+  headGapMs: number;
+  tailGapMs: number;
+  coverageRatio: number;
+  isPartial: boolean;
+}
+
 export interface SPCSeriesResponse {
   machineId: number;
   field: AllowedSPCField;
@@ -53,6 +64,7 @@ export interface SPCSeriesResponse {
   window: SPCSeriesWindow;
   sampling: SPCSeriesSampling;
   series: Array<{ ts: string; value: number }>;
+  coverage: SPCSeriesCoverage;
   stats: SPCSeriesStats | null;
   limits: SPCSeriesLimits | null;
   meta: {
@@ -64,7 +76,9 @@ export interface SPCSeriesResponse {
 @Injectable()
 export class SPCSeriesService {
   private readonly logger = new Logger(SPCSeriesService.name);
-  private readonly MAX_POINTS = 100;
+  private readonly DEFAULT_MAX_POINTS = 240;
+  private readonly MIN_POINTS = 20;
+  private readonly maxPoints = this.resolveMaxPoints();
   private readonly WINDOW_PRESETS: Record<SPCWindowPreset, string> = {
     last_15m: '-15m',
     last_1h: '-1h',
@@ -78,6 +92,15 @@ export class SPCSeriesService {
 
   constructor(private readonly influxDbService: InfluxDBService) {}
 
+  private resolveMaxPoints(): number {
+    const configured = Number(process.env.SPC_SERIES_MAX_POINTS);
+    if (!Number.isFinite(configured)) {
+      return this.DEFAULT_MAX_POINTS;
+    }
+
+    return Math.max(Math.floor(configured), this.MIN_POINTS);
+  }
+
   async getSeries(
     machineName: string,
     machineId: number,
@@ -85,21 +108,21 @@ export class SPCSeriesService {
     window: SPCWindowPreset,
     start?: string,
     end?: string,
-    limit: number = this.MAX_POINTS,
+    limit: number = this.maxPoints,
     order: 'asc' | 'desc' = 'asc',
     includeStats: boolean = true,
     includeLimits: boolean = true,
     downsample: SPCDownsampleStrategy = 'none',
   ): Promise<SPCSeriesResponse> {
     const windowRange = this.resolveWindow(window, start, end);
-    const safeLimit = Math.min(Math.max(limit, 20), this.MAX_POINTS);
-    const intervalMs = this.calculateInterval(
+    const safeLimit = Math.min(Math.max(limit, this.MIN_POINTS), this.maxPoints);
+    const requestedIntervalMs = this.calculateWindowInterval(
       windowRange.start,
       windowRange.end,
       safeLimit,
     );
 
-    const series = await this.querySeries(
+    const queryResult = await this.querySeries(
       machineName,
       field,
       windowRange.start,
@@ -108,6 +131,7 @@ export class SPCSeriesService {
       order,
       downsample,
     );
+    const { points: series, effectiveDownsample, intervalMs } = queryResult;
 
     if (series.length > 0) {
       const first = series[0];
@@ -120,7 +144,7 @@ export class SPCSeriesService {
           windowStart: windowRange.start,
           windowEnd: windowRange.end,
           order,
-          downsample,
+          downsample: effectiveDownsample,
           limit: safeLimit,
           intervalMs,
           returned: series.length,
@@ -141,7 +165,7 @@ export class SPCSeriesService {
           windowStart: windowRange.start,
           windowEnd: windowRange.end,
           order,
-          downsample,
+          downsample: effectiveDownsample,
           limit: safeLimit,
           intervalMs,
           returned: 0,
@@ -158,6 +182,7 @@ export class SPCSeriesService {
       includeLimits && stats
         ? this.calculateLimits(stats.mean, stats.stdDev)
         : null;
+    const coverage = this.calculateCoverage(windowRange, series);
 
     return {
       machineId,
@@ -167,10 +192,11 @@ export class SPCSeriesService {
       sampling: {
         limit: safeLimit,
         returned: series.length,
-        downsample,
-        intervalMs,
+        downsample: effectiveDownsample,
+        intervalMs: intervalMs ?? requestedIntervalMs,
       },
       series,
+      coverage,
       stats,
       limits,
       meta: {
@@ -231,11 +257,34 @@ export class SPCSeriesService {
     return result;
   }
 
-  private calculateInterval(start: string, end: string, limit: number): number {
+  private calculateWindowInterval(
+    start: string,
+    end: string,
+    limit: number,
+  ): number {
     const startTime = new Date(start).getTime();
     const endTime = new Date(end).getTime();
     const duration = Math.max(endTime - startTime, 0);
     return Math.max(Math.floor(duration / limit), 1000);
+  }
+
+  private calculateObservedInterval(
+    firstTs: string,
+    lastTs: string,
+    limit: number,
+  ): number {
+    if (limit <= 1) {
+      return 1000;
+    }
+
+    const firstTime = Date.parse(firstTs);
+    const lastTime = Date.parse(lastTs);
+    if (!Number.isFinite(firstTime) || !Number.isFinite(lastTime)) {
+      return 1000;
+    }
+
+    const observedSpanMs = Math.max(lastTime - firstTime, 0);
+    return Math.max(Math.ceil(observedSpanMs / (limit - 1)), 1000);
   }
 
   private async querySeries(
@@ -246,7 +295,43 @@ export class SPCSeriesService {
     limit: number,
     order: 'asc' | 'desc',
     downsample: SPCDownsampleStrategy,
-  ): Promise<Array<{ ts: string; value: number }>> {
+  ): Promise<{
+    points: Array<{ ts: string; value: number }>;
+    effectiveDownsample: SPCDownsampleStrategy;
+    intervalMs: number | null;
+  }> {
+    const coverageStats =
+      await this.influxDbService.querySPCSeriesCoverageStats(
+        machineName,
+        field,
+        start,
+        end,
+      );
+
+    if (!coverageStats.count) {
+      return {
+        points: [],
+        effectiveDownsample: 'none',
+        intervalMs: this.calculateWindowInterval(start, end, limit),
+      };
+    }
+
+    const shouldUseAggregatedQuery =
+      downsample !== 'none' &&
+      coverageStats.count > limit &&
+      !!coverageStats.firstTs &&
+      !!coverageStats.lastTs;
+    const effectiveDownsample: SPCDownsampleStrategy = shouldUseAggregatedQuery
+      ? downsample
+      : 'none';
+    const effectiveIntervalMs = shouldUseAggregatedQuery
+      ? this.calculateObservedInterval(
+          coverageStats.firstTs!,
+          coverageStats.lastTs!,
+          limit,
+        )
+      : null;
+
     const raw = await this.influxDbService.querySPCSeries(
       machineName,
       field,
@@ -254,65 +339,91 @@ export class SPCSeriesService {
       end,
       limit,
       order,
+      effectiveDownsample,
+      effectiveIntervalMs ?? undefined,
     );
 
     if (!raw.length) {
-      return [];
+      return {
+        points: [],
+        effectiveDownsample,
+        intervalMs:
+          effectiveIntervalMs ?? this.calculateWindowInterval(start, end, limit),
+      };
     }
 
-    const points = raw
+    let points = raw
       .map((row) => ({
         ts: row._time as string,
         value: Number(row._value),
       }))
       .filter((point) => !Number.isNaN(point.value));
 
-    if (downsample === 'none' || points.length <= limit) {
-      return points;
+    points = points.sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
+    if (order === 'desc') {
+      points = points.reverse();
     }
 
-    if (downsample === 'avg') {
-      return this.downsampleAverage(points, limit);
-    }
-
-    return this.downsampleMinMax(points, limit);
+    return {
+      points,
+      effectiveDownsample,
+      intervalMs:
+        effectiveIntervalMs ?? this.calculateWindowInterval(start, end, limit),
+    };
   }
 
-  private downsampleAverage(
-    points: Array<{ ts: string; value: number }>,
-    limit: number,
-  ): Array<{ ts: string; value: number }> {
-    const bucketSize = Math.ceil(points.length / limit);
-    const buckets: Array<{ ts: string; value: number }> = [];
+  private calculateCoverage(
+    window: SPCSeriesWindow,
+    series: Array<{ ts: string; value: number }>,
+  ): SPCSeriesCoverage {
+    const windowStartMs = Date.parse(window.start);
+    const windowEndMs = Date.parse(window.end);
+    const requestedSpanMs = Math.max(windowEndMs - windowStartMs, 0);
 
-    for (let i = 0; i < points.length; i += bucketSize) {
-      const bucket = points.slice(i, i + bucketSize);
-      const avg = bucket.reduce((sum, p) => sum + p.value, 0) / bucket.length;
-      buckets.push({ ts: bucket[0].ts, value: avg });
+    if (
+      !series.length ||
+      !Number.isFinite(windowStartMs) ||
+      !Number.isFinite(windowEndMs)
+    ) {
+      return {
+        firstTs: null,
+        lastTs: null,
+        requestedSpanMs,
+        observedSpanMs: 0,
+        headGapMs: requestedSpanMs,
+        tailGapMs: requestedSpanMs,
+        coverageRatio: 0,
+        isPartial: true,
+      };
     }
 
-    return buckets;
-  }
+    const firstTs = series[0].ts;
+    const lastTs = series[series.length - 1].ts;
+    const firstMs = Date.parse(firstTs);
+    const lastMs = Date.parse(lastTs);
+    const observedSpanMs =
+      series.length > 1 ? Math.max(lastMs - firstMs, 0) : 0;
+    const headGapMs = Math.max(firstMs - windowStartMs, 0);
+    const tailGapMs = Math.max(windowEndMs - lastMs, 0);
+    const effectiveCoveredSpanMs = Math.max(
+      requestedSpanMs - headGapMs - tailGapMs,
+      0,
+    );
+    const coverageRatio =
+      requestedSpanMs > 0
+        ? Math.min(Math.max(effectiveCoveredSpanMs / requestedSpanMs, 0), 1)
+        : 1;
 
-  private downsampleMinMax(
-    points: Array<{ ts: string; value: number }>,
-    limit: number,
-  ): Array<{ ts: string; value: number }> {
-    const bucketSize = Math.ceil(points.length / Math.ceil(limit / 2));
-    const result: Array<{ ts: string; value: number }> = [];
-
-    for (let i = 0; i < points.length; i += bucketSize) {
-      const bucket = points.slice(i, i + bucketSize);
-      let min = bucket[0];
-      let max = bucket[0];
-      for (const point of bucket) {
-        if (point.value < min.value) min = point;
-        if (point.value > max.value) max = point;
-      }
-      result.push(min, max);
-    }
-
-    return result.slice(0, limit);
+    return {
+      firstTs,
+      lastTs,
+      requestedSpanMs,
+      observedSpanMs,
+      headGapMs,
+      tailGapMs,
+      coverageRatio,
+      isPartial: coverageRatio < 1,
+    };
   }
 
   private calculateStats(values: number[]): SPCSeriesStats | null {
