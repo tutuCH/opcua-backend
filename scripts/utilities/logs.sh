@@ -23,7 +23,7 @@ APP_DIR="/opt/opcua-backend"
 
 # Parse arguments
 LINES="${1:-50}"
-SERVICE="${2:-app}"
+SERVICE="${2:-backend}"
 
 echo -e "${BLUE}Fetching last $LINES lines of $SERVICE logs from SIT...${NC}"
 echo ""
@@ -34,7 +34,8 @@ COMMAND_ID=$(aws ssm send-command \
     --document-name "AWS-RunShellScript" \
     --parameters "{\"commands\":[
         \"cd $APP_DIR\",
-        \"docker compose logs --tail=$LINES $SERVICE\"
+        \"if docker compose version >/dev/null 2>&1; then COMPOSE_CMD=\\\"docker compose\\\"; else COMPOSE_CMD=\\\"docker-compose\\\"; fi\",
+        \"\$COMPOSE_CMD logs --tail=$LINES $SERVICE\"
     ]}" \
     --output text \
     --query 'Command.CommandId')
@@ -54,4 +55,23 @@ OUTPUT=$(aws ssm get-command-invocation \
     --query 'StandardOutputContent' \
     --output text)
 
+STATUS=$(aws ssm get-command-invocation \
+    --region "$REGION" \
+    --command-id "$COMMAND_ID" \
+    --instance-id "$INSTANCE_ID" \
+    --query 'Status' \
+    --output text)
+
+ERROR_OUTPUT=$(aws ssm get-command-invocation \
+    --region "$REGION" \
+    --command-id "$COMMAND_ID" \
+    --instance-id "$INSTANCE_ID" \
+    --query 'StandardErrorContent' \
+    --output text)
+
 echo "$OUTPUT"
+
+if [[ "$STATUS" != "Success" && -n "$ERROR_OUTPUT" && "$ERROR_OUTPUT" != "None" ]]; then
+    echo "$ERROR_OUTPUT"
+    exit 1
+fi

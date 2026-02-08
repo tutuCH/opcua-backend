@@ -237,7 +237,29 @@ OUTPUT=$(aws ssm get-command-invocation \
     --query 'StandardOutputContent' \
     --output text)
 
-# Check if docker compose commands completed (don't rely on SSM status)
+STATUS=$(aws ssm get-command-invocation \
+    --region "$REGION" \
+    --command-id "$COMMAND_ID" \
+    --instance-id "$INSTANCE_ID" \
+    --query 'Status' \
+    --output text)
+
+ERROR_OUTPUT=$(aws ssm get-command-invocation \
+    --region "$REGION" \
+    --command-id "$COMMAND_ID" \
+    --instance-id "$INSTANCE_ID" \
+    --query 'StandardErrorContent' \
+    --output text)
+
+if [[ "$STATUS" != "Success" ]]; then
+    log_error "Rebuild/restart failed (SSM status: $STATUS):"
+    echo "$OUTPUT"
+    if [[ -n "$ERROR_OUTPUT" && "$ERROR_OUTPUT" != "None" ]]; then
+        echo "$ERROR_OUTPUT"
+    fi
+    exit 1
+fi
+
 if echo "$OUTPUT" | grep -q "=== Docker build and start completed ==="; then
     log_success "Services rebuilt and restarted"
     echo "$OUTPUT" | tail -15
