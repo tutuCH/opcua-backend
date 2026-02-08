@@ -209,14 +209,14 @@ OUTPUT=$(aws ssm get-command-invocation \
     --command-id "$COMMAND_ID" \
     --instance-id "$INSTANCE_ID" \
     --query 'StandardOutputContent' \
-    --output text)
+    --output text 2>/dev/null || true)
 
 STATUS=$(aws ssm get-command-invocation \
     --region "$REGION" \
     --command-id "$COMMAND_ID" \
     --instance-id "$INSTANCE_ID" \
     --query 'Status' \
-    --output text)
+    --output text 2>/dev/null || echo "Unknown")
 
 if [[ "$STATUS" != "Success" ]]; then
     log_error "Git pull failed:"
@@ -268,43 +268,59 @@ COMMAND_ID=$(aws ssm send-command \
 log_info "Waiting for rebuild and restart to complete (this may take 2-3 minutes)..."
 wait_for_ssm_command "$COMMAND_ID" 1200 >/dev/null || true
 
-# Get command output
-OUTPUT=$(aws ssm get-command-invocation \
-    --region "$REGION" \
-    --command-id "$COMMAND_ID" \
-    --instance-id "$INSTANCE_ID" \
-    --query 'StandardOutputContent' \
-    --output text)
-
 STATUS=$(aws ssm get-command-invocation \
     --region "$REGION" \
     --command-id "$COMMAND_ID" \
     --instance-id "$INSTANCE_ID" \
     --query 'Status' \
-    --output text)
-
-ERROR_OUTPUT=$(aws ssm get-command-invocation \
-    --region "$REGION" \
-    --command-id "$COMMAND_ID" \
-    --instance-id "$INSTANCE_ID" \
-    --query 'StandardErrorContent' \
-    --output text)
+    --output text 2>/dev/null || echo "Unknown")
 
 if [[ "$STATUS" != "Success" ]]; then
+    OUTPUT=$(aws ssm get-command-invocation \
+        --region "$REGION" \
+        --command-id "$COMMAND_ID" \
+        --instance-id "$INSTANCE_ID" \
+        --query 'StandardOutputContent' \
+        --output text 2>/dev/null || true)
+    ERROR_OUTPUT=$(aws ssm get-command-invocation \
+        --region "$REGION" \
+        --command-id "$COMMAND_ID" \
+        --instance-id "$INSTANCE_ID" \
+        --query 'StandardErrorContent' \
+        --output text 2>/dev/null || true)
+
     log_error "Rebuild/restart failed (SSM status: $STATUS):"
-    echo "$OUTPUT"
+    if [[ -n "$OUTPUT" && "$OUTPUT" != "None" ]]; then
+        echo "$OUTPUT"
+    fi
     if [[ -n "$ERROR_OUTPUT" && "$ERROR_OUTPUT" != "None" ]]; then
         echo "$ERROR_OUTPUT"
     fi
     exit 1
 fi
 
-if echo "$OUTPUT" | grep -q "=== Docker build and start completed ==="; then
-    log_success "Services rebuilt and restarted"
-    echo "$OUTPUT" | tail -15
-else
-    log_warning "Rebuild/restart may have issues, checking health endpoint..."
-    echo "$OUTPUT"
+log_success "Services rebuilt and restarted"
+
+STATUS_COMMAND_ID=$(aws ssm send-command \
+    --region "$REGION" \
+    --instance-ids "$INSTANCE_ID" \
+    --document-name "AWS-RunShellScript" \
+    --parameters '{"commands":[
+        "cd /opt/opcua-backend",
+        "if docker compose version >/dev/null 2>&1; then COMPOSE_CMD=\"docker compose\"; else COMPOSE_CMD=\"docker-compose\"; fi",
+        "$COMPOSE_CMD ps"
+    ]}' \
+    --output text \
+    --query 'Command.CommandId')
+wait_for_ssm_command "$STATUS_COMMAND_ID" 300 >/dev/null || true
+STATUS_OUTPUT=$(aws ssm get-command-invocation \
+    --region "$REGION" \
+    --command-id "$STATUS_COMMAND_ID" \
+    --instance-id "$INSTANCE_ID" \
+    --query 'StandardOutputContent' \
+    --output text 2>/dev/null || true)
+if [[ -n "$STATUS_OUTPUT" && "$STATUS_OUTPUT" != "None" ]]; then
+    echo "$STATUS_OUTPUT"
 fi
 
 # =============================================================================
@@ -362,7 +378,7 @@ OUTPUT=$(aws ssm get-command-invocation \
     --command-id "$COMMAND_ID" \
     --instance-id "$INSTANCE_ID" \
     --query 'StandardOutputContent' \
-    --output text)
+    --output text 2>/dev/null || true)
 
 echo "$OUTPUT"
 
