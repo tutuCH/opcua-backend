@@ -29,6 +29,11 @@ APP_DIR="/opt/opcua-backend"
 PUBLIC_ENDPOINT="https://api-dashboard.harrytu.cv"
 HEALTH_ENDPOINT="${PUBLIC_ENDPOINT}/health"
 
+# Ensure AWS CLI can safely print UTF-8 output from remote commands.
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export PYTHONIOENCODING=UTF-8
+
 # Logging functions
 log_info() {
     echo -e "${BLUE}ℹ${NC} $1"
@@ -51,6 +56,48 @@ log_step() {
     echo "================================================================================"
     echo -e "${BLUE}$1${NC}"
     echo "================================================================================"
+}
+
+is_terminal_ssm_status() {
+    local status="$1"
+    case "$status" in
+        Success|Cancelled|TimedOut|Failed|Cancelling|DeliveryTimedOut|ExecutionTimedOut|Undeliverable|Terminated|InvalidPlatform|AccessDenied)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+wait_for_ssm_command() {
+    local command_id="$1"
+    local timeout_seconds="${2:-900}"
+    local poll_interval=5
+    local elapsed=0
+    local status=""
+
+    while true; do
+        status=$(aws ssm get-command-invocation \
+            --region "$REGION" \
+            --command-id "$command_id" \
+            --instance-id "$INSTANCE_ID" \
+            --query 'Status' \
+            --output text 2>/dev/null || echo "Pending")
+
+        if is_terminal_ssm_status "$status"; then
+            echo "$status"
+            return 0
+        fi
+
+        if (( elapsed >= timeout_seconds )); then
+            echo "$status"
+            return 1
+        fi
+
+        sleep "$poll_interval"
+        elapsed=$((elapsed + poll_interval))
+    done
 }
 
 # Error handler
@@ -154,11 +201,7 @@ COMMAND_ID=$(aws ssm send-command \
     --query 'Command.CommandId')
 
 log_info "Waiting for git pull to complete..."
-aws ssm wait command-executed \
-    --region "$REGION" \
-    --command-id "$COMMAND_ID" \
-    --instance-id "$INSTANCE_ID" \
-    2>/dev/null || true
+wait_for_ssm_command "$COMMAND_ID" 300 >/dev/null || true
 
 # Get command output
 OUTPUT=$(aws ssm get-command-invocation \
@@ -223,11 +266,7 @@ COMMAND_ID=$(aws ssm send-command \
     --query 'Command.CommandId')
 
 log_info "Waiting for rebuild and restart to complete (this may take 2-3 minutes)..."
-aws ssm wait command-executed \
-    --region "$REGION" \
-    --command-id "$COMMAND_ID" \
-    --instance-id "$INSTANCE_ID" \
-    2>/dev/null || true
+wait_for_ssm_command "$COMMAND_ID" 1200 >/dev/null || true
 
 # Get command output
 OUTPUT=$(aws ssm get-command-invocation \
@@ -275,11 +314,11 @@ fi
 log_step "Step 3: Verifying Deployment Health"
 
 log_info "Waiting for application to be ready..."
-sleep 5
+sleep 10
 
 # Check health endpoint
 log_info "Checking health endpoint: $HEALTH_ENDPOINT"
-for i in {1..10}; do
+for i in {1..20}; do
     if curl -sf "$HEALTH_ENDPOINT" > /dev/null 2>&1; then
         log_success "Health check passed"
 
@@ -288,13 +327,13 @@ for i in {1..10}; do
         echo "$HEALTH_RESPONSE"
         break
     else
-        if [[ $i -eq 10 ]]; then
-            log_error "Health check failed after 10 attempts"
+        if [[ $i -eq 20 ]]; then
+            log_error "Health check failed after 20 attempts"
             log_warning "Check application logs for errors"
             exit 1
         fi
-        log_info "Health check attempt $i/10 failed, retrying in 3 seconds..."
-        sleep 3
+        log_info "Health check attempt $i/20 failed, retrying in 5 seconds..."
+        sleep 5
     fi
 done
 
@@ -316,11 +355,7 @@ COMMAND_ID=$(aws ssm send-command \
     --output text \
     --query 'Command.CommandId')
 
-aws ssm wait command-executed \
-    --region "$REGION" \
-    --command-id "$COMMAND_ID" \
-    --instance-id "$INSTANCE_ID" \
-    2>/dev/null || true
+wait_for_ssm_command "$COMMAND_ID" 300 >/dev/null || true
 
 OUTPUT=$(aws ssm get-command-invocation \
     --region "$REGION" \
