@@ -26,15 +26,22 @@ export class CognitoAccessTokenService {
     private readonly configService: ConfigService,
     private readonly userService: UserService,
   ) {
-    const region = this.configService.get<string>('auth.cognito.region');
-    if (!region && process.env.NODE_ENV !== 'test') {
-      throw new Error(
-        '[Auth] Missing Cognito region configuration. Set COGNITO_REGION.',
+    const configuredCognitoRegion = this.configService.get<string>(
+      'auth.cognito.region',
+    );
+    const region =
+      configuredCognitoRegion ||
+      this.configService.get<string>('aws.region') ||
+      'us-east-1';
+
+    if (!configuredCognitoRegion && process.env.NODE_ENV !== 'test') {
+      this.logger.warn(
+        '[Auth] COGNITO_REGION is not configured. Cognito access-token hydration is disabled until Cognito env vars are set.',
       );
     }
 
     this.cognitoClient = new AWS.CognitoIdentityServiceProvider({
-      region: region || 'us-east-1',
+      region,
     });
   }
 

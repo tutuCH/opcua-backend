@@ -89,4 +89,32 @@ describe('JwtStrategy', () => {
       }),
     ).rejects.toThrow(UnauthorizedException);
   });
+
+  it('falls back to local JWT payload validation when Cognito config is missing', async () => {
+    const localConfigService = {
+      get: jest.fn((key: string) => {
+        const configMap: Record<string, string> = {
+          'auth.jwtSecret': 'test-secret',
+        };
+        return configMap[key];
+      }),
+    } as any;
+    const localCognitoService = {
+      extractAccessTokenFromRequest: jest.fn(),
+      resolveUserFromAccessToken: jest.fn(),
+    } as any;
+    const localStrategy = new JwtStrategy(localConfigService, localCognitoService);
+
+    const result = await localStrategy.validate({} as Request, {
+      sub: '42',
+      email: 'local@example.com',
+      role: 'admin',
+    });
+
+    expect(result.userId).toBe(42);
+    expect(result.email).toBe('local@example.com');
+    expect(result.accessLevel).toBe('admin');
+    expect(localCognitoService.extractAccessTokenFromRequest).not.toHaveBeenCalled();
+    expect(localCognitoService.resolveUserFromAccessToken).not.toHaveBeenCalled();
+  });
 });

@@ -15,6 +15,7 @@ interface CognitoAccessTokenPayload {
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   private readonly logger = new Logger(JwtStrategy.name);
+  private readonly cognitoEnabled: boolean;
 
   constructor(
     private readonly configService: ConfigService,
@@ -25,23 +26,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const clientId = configService.get<string>('auth.cognito.clientId');
     const issuerUrl = configService.get<string>('auth.cognito.issuerUrl');
 
-    const missingVars = [
-      !region && 'COGNITO_REGION',
-      !userPoolId && 'COGNITO_USER_POOL_ID',
-      !clientId && 'COGNITO_CLIENT_ID',
-    ].filter(Boolean) as string[];
-
-    if (missingVars.length > 0 && process.env.NODE_ENV !== 'test') {
-      throw new Error(
-        `[Auth] Missing required Cognito environment variables: ${missingVars.join(', ')}.`,
-      );
-    }
-
-    if (!issuerUrl && process.env.NODE_ENV !== 'test') {
-      throw new Error(
-        '[Auth] Unable to resolve Cognito issuer URL. Set COGNITO_REGION and COGNITO_USER_POOL_ID, or set COGNITO_ISSUER_URL explicitly.',
-      );
-    }
+    const cognitoEnabled = Boolean(region && userPoolId && clientId && issuerUrl);
 
     const cookieExtractor = (req: Request): string | null => {
       if (!req?.cookies) {
@@ -50,25 +35,77 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       return req.cookies.access_token || null;
     };
 
-    super({
-      jwtFromRequest: ExtractJwt.fromExtractors([
-        cookieExtractor,
-        ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ]),
-      secretOrKeyProvider: passportJwtSecret({
-        cache: true,
-        rateLimit: true,
-        jwksRequestsPerMinute: 10,
-        jwksUri: `${issuerUrl}/.well-known/jwks.json`,
-      }) as any,
+    const extractors = [
+      cookieExtractor,
+      ExtractJwt.fromAuthHeaderAsBearerToken(),
+    ];
+
+    const baseStrategyOptions = {
+      jwtFromRequest: ExtractJwt.fromExtractors(extractors),
       ignoreExpiration: false,
-      algorithms: ['RS256'],
-      issuer: issuerUrl || undefined,
       passReqToCallback: true,
-    });
+    };
+
+    let strategyOptions: any;
+    if (cognitoEnabled) {
+      strategyOptions = {
+        ...baseStrategyOptions,
+        secretOrKeyProvider: passportJwtSecret({
+          cache: true,
+          rateLimit: true,
+          jwksRequestsPerMinute: 10,
+          jwksUri: `${issuerUrl}/.well-known/jwks.json`,
+        }) as any,
+        algorithms: ['RS256'],
+        issuer: issuerUrl,
+      };
+    } else {
+      const jwtSecret = configService.get<string>('auth.jwtSecret');
+      if (!jwtSecret && process.env.NODE_ENV !== 'test') {
+        throw new Error(
+          '[Auth] Missing JWT secret configuration. Set JWT_SECRET.',
+        );
+      }
+
+      strategyOptions = {
+        ...baseStrategyOptions,
+        secretOrKey: jwtSecret,
+        algorithms: ['HS256'],
+      };
+    }
+
+    super(strategyOptions);
+    this.cognitoEnabled = cognitoEnabled;
+
+    if (!cognitoEnabled && process.env.NODE_ENV !== 'test') {
+      this.logger.warn(
+        '[Auth] Cognito env is incomplete. Falling back to local JWT (HS256) validation.',
+      );
+    }
   }
 
-  async validate(req: Request, payload: CognitoAccessTokenPayload) {
+  async validate(req: Request, payload: CognitoAccessTokenPayload | any) {
+    if (!this.cognitoEnabled) {
+      const userId = Number(payload?.sub);
+      const email = payload?.email;
+      if (!Number.isFinite(userId) || !email) {
+        throw new UnauthorizedException('Invalid local token payload');
+      }
+
+      return {
+        userId,
+        username:
+          payload?.username ||
+          (typeof email === 'string' ? email.split('@')[0] : 'user'),
+        email,
+        accessLevel: payload?.role || payload?.accessLevel || 'operator',
+        status: payload?.status || 'active',
+        createdAt: payload?.createdAt ? new Date(payload.createdAt) : new Date(),
+        updatedAt: payload?.updatedAt ? new Date(payload.updatedAt) : new Date(),
+        cognitoSub: String(payload?.sub),
+      };
+    }
+
     const configuredClientId = this.configService.get<string>(
       'auth.cognito.clientId',
     );
