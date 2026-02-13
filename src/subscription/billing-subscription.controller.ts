@@ -5,12 +5,10 @@ import {
   Delete,
   Body,
   Param,
-  UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { JwtAuthGuard } from '../auth/strategies/auth.guard';
 import { JwtUserId } from '../auth/decorators/jwt-user-id.decorator';
 import { BillingSubscriptionService } from './billing-subscription.service';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
@@ -29,7 +27,6 @@ const THROTTLE_LONG = {
 };
 
 @Controller('api/subscription')
-@UseGuards(JwtAuthGuard)
 export class BillingSubscriptionController {
   constructor(
     private readonly billingSubscriptionService: BillingSubscriptionService,

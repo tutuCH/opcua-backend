@@ -8,6 +8,7 @@ import { RealtimeStreamService } from './realtime-stream.service';
 import { RealtimeStreamAuthService } from './realtime-stream-auth.service';
 import { RedisService } from '../redis/redis.service';
 import { MachinesService } from '../machines/machines.service';
+import { CognitoAccessTokenService } from '../auth/cognito-access-token.service';
 
 describe('RealtimeStreamController (SSE)', () => {
   let app: INestApplication;
@@ -15,6 +16,7 @@ describe('RealtimeStreamController (SSE)', () => {
   let authService: RealtimeStreamAuthService;
   let machinesService: jest.Mocked<MachinesService>;
   let baseUrl: string;
+  const redisStore = new Map<string, string>();
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -27,6 +29,14 @@ describe('RealtimeStreamController (SSE)', () => {
           provide: RedisService,
           useValue: {
             subscribe: jest.fn().mockResolvedValue(undefined),
+            set: jest
+              .fn()
+              .mockImplementation(async (key: string, value: string) => {
+                redisStore.set(key, value);
+              }),
+            get: jest
+              .fn()
+              .mockImplementation(async (key: string) => redisStore.get(key)),
           },
         },
         {
@@ -49,6 +59,12 @@ describe('RealtimeStreamController (SSE)', () => {
           provide: ConfigService,
           useValue: { get: jest.fn() },
         },
+        {
+          provide: CognitoAccessTokenService,
+          useValue: {
+            resolveUserFromAuthorizationHeader: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -67,7 +83,9 @@ describe('RealtimeStreamController (SSE)', () => {
   });
 
   it('streams realtime-update events', async () => {
-    const { ticket } = await authService.createStreamTicket(123, 300);
+    const { ticket } = await authService.createStreamTicket(123, {
+      ttlSeconds: 300,
+    });
 
     const streamData = await new Promise<string>((resolve, reject) => {
       const streamUrl = `${baseUrl}/sse/stream?deviceId=${encodeURIComponent(

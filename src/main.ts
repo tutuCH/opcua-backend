@@ -1,8 +1,5 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { JwtAuthGuard } from './auth/strategies/auth.guard';
-import { Reflector } from '@nestjs/core';
-import { UserOwnershipGuard } from './auth/strategies/user.ownership.guard';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '@nestjs/common';
 import * as compression from 'compression';
@@ -72,15 +69,6 @@ async function bootstrap() {
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with'],
   });
-
-  // Get Reflector instance from the app context
-  const reflector = app.get(Reflector);
-
-  // Apply JwtAuthGuard globally (but allow @Public() decorator to bypass)
-  app.useGlobalGuards(
-    new JwtAuthGuard(reflector),
-    new UserOwnershipGuard(reflector),
-  );
 
   await app.listen(port);
 

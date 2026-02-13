@@ -10,6 +10,7 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { emailAddress, emailPassword } from './strategies/constants';
 import { EmailModule } from '../email/email.module';
+import { CognitoAccessTokenService } from './cognito-access-token.service';
 @Module({
   imports: [
     UserModule,
@@ -37,8 +38,13 @@ import { EmailModule } from '../email/email.module';
       }),
     }),
   ],
-  providers: [AuthService, GoogleAuthService, JwtStrategy],
+  providers: [
+    AuthService,
+    GoogleAuthService,
+    JwtStrategy,
+    CognitoAccessTokenService,
+  ],
   controllers: [AuthController],
-  exports: [AuthService],
+  exports: [AuthService, CognitoAccessTokenService],
 })
 export class AuthModule {}

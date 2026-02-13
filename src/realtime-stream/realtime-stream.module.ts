@@ -6,11 +6,13 @@ import { RealtimeStreamService } from './realtime-stream.service';
 import { RealtimeStreamAuthService } from './realtime-stream-auth.service';
 import { RedisModule } from '../redis/redis.module';
 import { MachinesModule } from '../machines/machines.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     RedisModule,
     MachinesModule,
+    AuthModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({

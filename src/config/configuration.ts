@@ -47,25 +47,36 @@ export const mockDataConfig = registerAs('mockData', () => ({
   dataInterval: parseInt(process.env.MOCK_DATA_INTERVAL, 10) || 5000,
 }));
 
-export const authConfig = registerAs('auth', () => ({
-  jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
+export const authConfig = registerAs('auth', () => {
+  const cognitoRegion = process.env.COGNITO_REGION || process.env.AWS_REGION;
+  const cognitoUserPoolId = process.env.COGNITO_USER_POOL_ID;
 
-  // AWS Cognito
-  cognito: {
-    domain: process.env.COGNITO_DOMAIN || null,
-    clientId: process.env.COGNITO_CLIENT_ID || null,
-    clientSecret: process.env.COGNITO_CLIENT_SECRET || null,
-    callbackUrl:
-      process.env.COGNITO_CALLBACK_URL ||
-      'http://localhost:3000/auth/cognito/callback',
-    issuerUrl: process.env.COGNITO_ISSUER_URL || null,
-  },
+  return {
+    jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
 
-  // Google OAuth 2.0
-  google: {
-    clientId: process.env.GOOGLE_CLIENT_ID || null,
-  },
-}));
+    // AWS Cognito
+    cognito: {
+      region: cognitoRegion || null,
+      userPoolId: cognitoUserPoolId || null,
+      domain: process.env.COGNITO_DOMAIN || null,
+      clientId: process.env.COGNITO_CLIENT_ID || null,
+      clientSecret: process.env.COGNITO_CLIENT_SECRET || null,
+      callbackUrl:
+        process.env.COGNITO_CALLBACK_URL ||
+        'http://localhost:3000/auth/cognito/callback',
+      issuerUrl:
+        process.env.COGNITO_ISSUER_URL ||
+        (cognitoRegion && cognitoUserPoolId
+          ? `https://cognito-idp.${cognitoRegion}.amazonaws.com/${cognitoUserPoolId}`
+          : null),
+    },
+
+    // Google OAuth 2.0
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID || null,
+    },
+  };
+});
 
 export const emailConfig = registerAs('email', () => ({
   address: process.env.EMAIL_ADDRESS || null,

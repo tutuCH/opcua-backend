@@ -4,12 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { RedisService } from '../redis/redis.service';
 import { CreateStreamTicketDto } from './dto/create-stream-ticket.dto';
-
-interface StreamTicketResult {
-  ticket: string;
-  expiresInSeconds: number;
-  ticketId: string;
-}
+import { CognitoAccessTokenService } from '../auth/cognito-access-token.service';
 
 @Injectable()
 export class RealtimeStreamAuthService {
@@ -21,6 +16,7 @@ export class RealtimeStreamAuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
+    private readonly cognitoAccessTokenService: CognitoAccessTokenService,
   ) {
     const configured = Number(
       this.configService.get('stream.ticketTtlSeconds') ??
@@ -85,7 +81,7 @@ export class RealtimeStreamAuthService {
     }
 
     if (authorization) {
-      const userId = this.verifyAccessToken(authorization);
+      const userId = await this.verifyAccessToken(authorization);
       return { userId, ticketPurpose: 'any' };
     }
 
@@ -149,18 +145,13 @@ export class RealtimeStreamAuthService {
     }
   }
 
-  private verifyAccessToken(authorization: string): number {
-    const token = authorization.startsWith('Bearer ')
-      ? authorization.slice(7).trim()
-      : authorization.trim();
-
+  private async verifyAccessToken(authorization: string): Promise<number> {
     try {
-      const payload = this.jwtService.verify(token);
-      const userId = Number(payload.sub);
-      if (!Number.isFinite(userId)) {
-        throw new UnauthorizedException('Invalid access token');
-      }
-      return userId;
+      const user =
+        await this.cognitoAccessTokenService.resolveUserFromAuthorizationHeader(
+          authorization,
+        );
+      return user.userId;
     } catch (error) {
       this.logger.warn(
         `Access token validation failed: ${error?.message || error}`,

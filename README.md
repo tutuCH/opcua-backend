@@ -323,6 +323,11 @@ FRONTEND_URL=http://localhost:3030
 
 # Authentication
 JWT_SECRET=<random-48-byte-base64>
+COGNITO_REGION=us-east-1
+COGNITO_USER_POOL_ID=us-east-1_xxxxxxxx
+COGNITO_CLIENT_ID=<cognito-app-client-id>
+# Optional override:
+# COGNITO_ISSUER_URL=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_xxxxxxxx
 
 # Mock Data
 ENABLE_MOCK_DATA=true|false  # Simulate 10 machines
@@ -352,6 +357,10 @@ MQTT_BROKER_URL=mqtt://mosquitto:1883
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 ```
+
+Protected backend APIs now require a valid Cognito access token in
+`Authorization: Bearer <access-token>`. Legacy backend-issued JWTs are not
+accepted by protected routes.
 
 ### Mock Data
 

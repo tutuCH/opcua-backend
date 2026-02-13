@@ -3,26 +3,25 @@ import {
   ExecutionContext,
   UnauthorizedException,
 } from '@nestjs/common';
-import { decodeJwtToken } from '../utils/jwt-decoder.util';
+import { AuthenticatedRequestUser } from '../interfaces/authenticated-user.interface';
+
+export function extractUserIdFromRequest(
+  request: { user?: AuthenticatedRequestUser },
+): number {
+  const userId = request.user?.userId;
+  if (!userId || !Number.isFinite(userId)) {
+    throw new UnauthorizedException('Authenticated user context is missing');
+  }
+
+  return userId;
+}
 
 /**
- * Custom decorator that extracts the userId from the JWT token in the request headers
- * @example
- * @Get()
- * findAll(@JwtUserId() userId: number) {
- *   return this.service.findAllForUser(userId);
- * }
+ * Custom decorator that extracts userId from authenticated request context.
  */
 export const JwtUserId = createParamDecorator(
   (data: unknown, ctx: ExecutionContext): number => {
     const request = ctx.switchToHttp().getRequest();
-    const authHeader = request.headers.authorization;
-
-    if (!authHeader) {
-      throw new UnauthorizedException('Authorization header is missing');
-    }
-
-    const decodedToken = decodeJwtToken(authHeader);
-    return parseInt(decodedToken.sub, 10); // Return the userId from the JWT token as number
+    return extractUserIdFromRequest(request);
   },
 );
